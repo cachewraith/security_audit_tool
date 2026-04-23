@@ -49,35 +49,38 @@ This tool performs **two types** of security assessments:
 
 ### 1. Install
 
-**Option A: From PyPI (Recommended)**
 ```bash
 pip install cache-wraith-audit-tool
 ```
 
-**Option B: From Source**
-```bash
-git clone https://github.com/cachewraith/security_audit_tool.git
-cd security_audit_tool
-pip install -e .
-```
-
 ### 2. Run Your First Scan
 
+**Interactive Mode (Easiest)** - Just run with no arguments:
 ```bash
-# Simple command - full security audit
-./audit --url https://your-website.com --full-scan
+security-audit
+```
+
+The TUI will guide you through target selection, scan mode, and reporting.
+
+**Command Line Mode**:
+```bash
+# Simple security audit
+security-audit --url https://your-website.com --full-scan
+
+# Scan local system
+security-audit --local --full-scan
 ```
 
 This creates:
-- `security_audit_20250423_184904.html` - Professional HTML report
-- `security_audit_20250423_184904.json` - Machine-readable JSON
-- Terminal output with colorized findings
+- `audit_report_*.html` - Professional HTML report
+- `audit_report_*.json` - Machine-readable JSON
+- `audit_report_*.pdf` - PDF report (pentest mode)
 
 ### 3. View Results
 
 ```bash
 # Open the HTML report
-firefox security_audit_*.html
+firefox audit_report_*.html
 ```
 
 ---
@@ -88,32 +91,35 @@ firefox security_audit_*.html
 
 ```bash
 # Scan any website
-./audit --url https://example.com --full-scan
+security-audit --url https://example.com --full-scan
 
 # Scan your local system
-./audit --local --full-scan
+security-audit --local --full-scan
 
 # Scan a project directory
-./audit --path ./my-project --full-scan
+security-audit --path ./my-project --full-scan
 
 # Scan multiple websites
-./audit --url https://api1.com --url https://api2.com --full-scan
+security-audit --url https://api1.com --url https://api2.com --full-scan
+
+# Interactive mode (no arguments)
+security-audit
 ```
 
 ### Pentest Mode (Active Testing)
 
 ```bash
 # Full pentest with performance, vulnerability, and load tests
-./audit --url https://your-business.com --pentest-mode --full-scan
+security-audit --url https://your-business.com --pentest-mode
 
 # Just vulnerability scan (SQLi, XSS tests)
-./audit --url https://your-api.com --enable-vulnerability-scan
+security-audit --url https://your-api.com --enable-vulnerability-scan
 
 # Performance test only
-./audit --url https://your-api.com --enable-performance-test
+security-audit --url https://your-api.com --enable-performance-test
 
 # Load test (simulates traffic - use with caution!)
-./audit --url https://your-api.com --enable-load-test
+security-audit --url https://your-api.com --enable-load-test
 ```
 
 **⚠️ Pentest features send actual traffic to your target. Only use on your own systems.**
@@ -143,6 +149,37 @@ firefox security_audit_*.html
 
 ---
 
+## 🔬 Security Checks Reference
+
+| Check ID | Category | Description | Default |
+|----------|----------|-------------|---------|
+| **permissions** | Read-Only | File/directory permissions (world-writable, SUID/SGID) | ✅ Enabled |
+| **services** | Read-Only | Running service and port enumeration | ✅ Enabled |
+| **firewall** | Read-Only | Firewall status and configuration | ✅ Enabled |
+| **hardening** | Read-Only | OS hardening indicator checks | ✅ Enabled |
+| **secrets** | Read-Only | Hardcoded secrets and credential patterns | ✅ Enabled |
+| **dependencies** | Read-Only | Outdated and vulnerable dependencies | ✅ Enabled |
+| **containers** | Read-Only | Docker/container security configuration | ✅ Enabled |
+| **webapp_config** | Read-Only | Web application configuration checks | ✅ Enabled |
+| **tls** | Read-Only | TLS/SSL certificate inspection | ⚠️ `--enable-tls-checks` |
+| **performance** | Active | Response time measurement | ⚠️ `--enable-performance-test` |
+| **vulnerability** | Active | SQL injection, XSS tests | ⚠️ `--enable-vulnerability-scan` |
+| **load_test** | Active | DDoS simulation (intensive) | ⚠️ `--pentest-mode` only |
+
+**Use with `--skip-checks` or `--only-checks`:**
+```bash
+# Skip specific checks
+security-audit --url example.com --skip-checks "tls,containers"
+
+# Run only specific checks
+security-audit --url example.com --only-checks "vulnerability,secrets"
+
+# List all available checks
+security-audit --list-checks
+```
+
+---
+
 ## 📊 Output Formats
 
 | Format | File Extension | Use Case |
@@ -150,6 +187,7 @@ firefox security_audit_*.html
 | **Terminal** | - | Quick review during development |
 | **HTML** | `.html` | Share with team, management, compliance |
 | **JSON** | `.json` | CI/CD integration, automation, archiving |
+| **PDF** | `.pdf` | Formal documentation, offline review |
 
 ---
 
@@ -259,12 +297,12 @@ jobs:
           python -m venv venv
           venv/bin/pip install -e .
       - name: Run Security Audit
-        run: ./audit --url https://staging.your-app.com --full-scan
+        run: security-audit --url https://staging.your-app.com --full-scan
       - name: Upload Report
         uses: actions/upload-artifact@v3
         with:
           name: security-report
-          path: security_audit_*.html
+          path: audit_report_*.html
 ```
 
 ---
