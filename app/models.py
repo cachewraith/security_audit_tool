@@ -38,6 +38,7 @@ class Category(Enum):
     CONTAINERS = "containers"
     WEBAPP_CONFIG = "webapp_config"
     NETWORK = "network"
+    APPLICATION = "application"
 
 
 @dataclass
