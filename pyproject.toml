@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cache-wraith-audit-tool"
-version = "1.0.1"
+version = "1.0.3"
 description = "Python security scanner with pentest mode - audit your website, API, or server"
 readme = "README.md"
 license = "MIT"
@@ -43,6 +43,7 @@ dev = [
 
 [project.scripts]
 security-audit = "app.main:main"
+audit = "app.main:main"
 
 [project.urls]
 Homepage = "https://github.com/cachewraith/security_audit_tool"

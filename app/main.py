@@ -175,7 +175,7 @@ def main(args: list[str] | None = None) -> int:
         return 0
 
     # Parse CLI arguments
-    parsed_args = parse_args(args)
+    parsed_args = parse_args(actual_args)
     
     # Handle special commands
     if parsed_args.list_checks:
