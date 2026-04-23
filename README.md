@@ -49,14 +49,16 @@ This tool performs **two types** of security assessments:
 
 ### 1. Install
 
+**Option A: From PyPI (Recommended)**
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/security-audit-tool.git
-cd security-audit-tool
+pip install cache-wraith-audit-tool
+```
 
-# Create virtual environment and install
-python -m venv venv
-venv/bin/pip install -e .
+**Option B: From Source**
+```bash
+git clone https://github.com/cachewraith/security_audit_tool.git
+cd security_audit_tool
+pip install -e .
 ```
 
 ### 2. Run Your First Scan

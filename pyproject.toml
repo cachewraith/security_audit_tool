@@ -3,16 +3,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "security-audit-tool"
+name = "cache-wraith-audit-tool"
 version = "1.0.0"
-description = "Defensive security assessment tool for authorized use only"
+description = "Python security scanner with pentest mode - audit your website, API, or server"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "Security Audit Tool", email = "security@example.com" }
+    { name = "cachewraith", email = "somonorhong011@gmail.com" }
 ]
-keywords = ["security", "audit", "defensive", "compliance", "scanning"]
+keywords = ["security", "pentest", "audit", "vulnerability", "scanner", "website", "api", "ddos", "sql-injection", "xss"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Information Technology",
@@ -42,10 +42,10 @@ dev = [
 security-audit = "app.main:main"
 
 [project.urls]
-Homepage = "https://github.com/example/security-audit-tool"
-Documentation = "https://github.com/example/security-audit-tool/blob/main/README.md"
-Repository = "https://github.com/example/security-audit-tool.git"
-Issues = "https://github.com/example/security-audit-tool/issues"
+Homepage = "https://github.com/cachewraith/security_audit_tool"
+Documentation = "https://github.com/cachewraith/security_audit_tool/blob/main/README.md"
+Repository = "https://github.com/cachewraith/security_audit_tool.git"
+Issues = "https://github.com/cachewraith/security_audit_tool/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
