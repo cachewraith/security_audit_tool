@@ -121,19 +121,33 @@ class TerminalReporter:
     # ----------------------------
     # header / summary
     # ----------------------------
-    def _header(self) -> str:
+    def _header(self, summary: AuditSummary | None = None) -> str:
         width = self._effective_width()
         title = "SECURITY AUDIT TOOL"
         subtitle = "Authorized Use Only · Defensive Scanner"
+        author = "Made by Somonor Hong"
 
         title_line = title.center(width)
         subtitle_line = subtitle.center(width)
+        author_line = author.center(width)
 
-        return "\n".join([
+        lines = [
             self._c(title_line, f"{self.BOLD}{self.CYAN}"),
             self._c(subtitle_line, self.GRAY),
+            self._c(author_line, f"{self.BOLD}{self.BLUE}"),
             self._c("═" * width, self.GRAY),
-        ])
+        ]
+        
+        if summary:
+            finding_text = f"FOUND {len(summary.findings)} SECURITY VULNERABILITIES"
+            if len(summary.findings) == 0:
+                finding_text = "NO SECURITY VULNERABILITIES FOUND"
+            
+            lines.append("")
+            lines.append(self._c(finding_text.center(width), self.BOLD + self.YELLOW if len(summary.findings) > 0 else self.GREEN))
+            lines.append("")
+            
+        return "\n".join(lines)
 
     def _severity_summary(self, summary: AuditSummary) -> str:
         counts = summary.count_by_severity()
@@ -219,7 +233,7 @@ class TerminalReporter:
     def generate(self, summary: AuditSummary, output: TextIO | None = None) -> str:
         lines: list[str] = []
 
-        lines.append(self._header())
+        lines.append(self._header(summary))
         lines.append("")
 
         lines.append(self._section("SUMMARY", self.CYAN))
@@ -284,7 +298,7 @@ class TerminalReporter:
 
     def print_summary_only(self, summary: AuditSummary) -> str:
         lines = [
-            self._header(),
+            self._header(summary),
             "",
             self._kv_block(
                 [

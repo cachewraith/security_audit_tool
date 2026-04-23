@@ -31,7 +31,8 @@ from .checks import (
     VulnerabilityCheck,
     BaseCheck,
 )
-from .report import JSONReporter, HTMLReporter, TerminalReporter
+from .report import JSONReporter, HTMLReporter, TerminalReporter, PDFReporter
+from .tui import TUI
 
 
 def get_available_checks(config: Config) -> list[type[BaseCheck]]:
@@ -132,6 +133,47 @@ def main(args: list[str] | None = None) -> int:
     Returns:
         Exit code (0 for success, 1 for failure)
     """
+    # Check if we should run in interactive TUI mode
+    # Run TUI if no arguments are provided to the script
+    actual_args = args if args is not None else sys.argv[1:]
+    
+    if not actual_args:
+        tui = TUI()
+        while True:
+            tui_result = tui.run()
+            if not tui_result:
+                return 0
+            
+            config, scope_manager, extra_options = tui_result
+            
+            # Setup logging for TUI mode
+            logger = setup_logging(
+                verbose=config.output.verbose,
+                quiet=config.output.quiet,
+                log_file=config.output.log_path,
+            )
+            
+            # Convert comma-separated strings to lists
+            skip_checks = extra_options.get("skip_checks")
+            if skip_checks and isinstance(skip_checks, str):
+                skip_checks = [c.strip() for c in skip_checks.split(",")]
+                
+            only_checks = extra_options.get("only_checks")
+            if only_checks and isinstance(only_checks, str):
+                only_checks = [c.strip() for c in only_checks.split(",")]
+            
+            _run_audit_workflow(
+                config=config,
+                scope_manager=scope_manager,
+                logger=logger,
+                skip_checks=skip_checks,
+                only_checks=only_checks,
+            )
+            
+            if not tui.wait_for_user():
+                break
+        return 0
+
     # Parse CLI arguments
     parsed_args = parse_args(args)
     
@@ -195,6 +237,39 @@ def main(args: list[str] | None = None) -> int:
         logger.error(f"Error building scope: {e}")
         return 1
     
+    # Parse skip/only checks
+    skip_checks: list[str] | None = None
+    only_checks: list[str] | None = None
+    
+    if parsed_args.skip_checks:
+        skip_checks = [c.strip() for c in parsed_args.skip_checks.split(",")]
+    
+    if parsed_args.only_checks:
+        only_checks = [c.strip() for c in parsed_args.only_checks.split(",")]
+    
+    return _run_audit_workflow(
+        config=config,
+        scope_manager=scope_manager,
+        logger=logger,
+        skip_checks=skip_checks,
+        only_checks=only_checks,
+        report_json_override=parsed_args.report_json,
+        report_html_override=parsed_args.report_html,
+        report_pdf_override=parsed_args.report_pdf,
+    )
+
+
+def _run_audit_workflow(
+    config: Config,
+    scope_manager: ScopeManager,
+    logger,
+    skip_checks: list[str] | None = None,
+    only_checks: list[str] | None = None,
+    report_json_override: Path | None = None,
+    report_html_override: Path | None = None,
+    report_pdf_override: Path | None = None,
+) -> int:
+    """Run the complete audit workflow with given configuration."""
     # Log scope summary
     scope_summary = scope_manager.get_scope_summary()
     log_audit_start(
@@ -208,25 +283,29 @@ def main(args: list[str] | None = None) -> int:
         print(scope_summary)
         print()
     
-    # Parse skip/only checks
-    skip_checks: list[str] | None = None
-    only_checks: list[str] | None = None
-    
-    if parsed_args.skip_checks:
-        skip_checks = [c.strip() for c in parsed_args.skip_checks.split(",")]
-    
-    if parsed_args.only_checks:
-        only_checks = [c.strip() for c in parsed_args.only_checks.split(",")]
-    
     # Run security checks
     try:
-        summary = run_checks(
-            scope=scope_manager.scope,
-            config=config,
-            logger=logger,
-            skip_checks=skip_checks,
-            only_checks=only_checks,
-        )
+        tui = TUI()
+        
+        # Run checks with dashboard progress if in TUI mode (no quiet)
+        if not config.output.quiet:
+            summary = tui.run_with_progress(
+                run_checks,
+                scope=scope_manager.scope,
+                config=config,
+                logger=logger,
+                skip_checks=skip_checks,
+                only_checks=only_checks,
+            )
+        else:
+            summary = run_checks(
+                scope=scope_manager.scope,
+                config=config,
+                logger=logger,
+                skip_checks=skip_checks,
+                only_checks=only_checks,
+            )
+            
     except Exception as e:
         logger.error(f"Audit failed: {e}")
         return 1
@@ -243,32 +322,26 @@ def main(args: list[str] | None = None) -> int:
             print(terminal_output)
         
         # JSON report
-        if config.output.json_report_path or parsed_args.report_json:
-            json_path = parsed_args.report_json or config.output.json_report_path
-            if json_path:
-                json_reporter = JSONReporter()
-                json_reporter.write(summary, json_path)
-                logger.info(f"JSON report written to: {json_path}")
+        json_path = report_json_override or config.output.json_report_path
+        if json_path:
+            json_reporter = JSONReporter()
+            json_reporter.write(summary, json_path)
+            logger.info(f"JSON report written to: {json_path}")
         
         # HTML report
-        if config.output.html_report_path or parsed_args.report_html:
-            html_path = parsed_args.report_html or config.output.html_report_path
-            if html_path:
-                html_reporter = HTMLReporter()
-                html_reporter.write(summary, html_path)
-                logger.info(f"HTML report written to: {html_path}")
-        
-        # Also write JSON if path specified via CLI
-        if parsed_args.report_json and parsed_args.report_json != config.output.json_report_path:
-            json_reporter = JSONReporter()
-            json_reporter.write(summary, parsed_args.report_json)
-            logger.info(f"JSON report written to: {parsed_args.report_json}")
-        
-        if parsed_args.report_html and parsed_args.report_html != config.output.html_report_path:
+        html_path = report_html_override or config.output.html_report_path
+        if html_path:
             html_reporter = HTMLReporter()
-            html_reporter.write(summary, parsed_args.report_html)
-            logger.info(f"HTML report written to: {parsed_args.report_html}")
-    
+            html_reporter.write(summary, html_path)
+            logger.info(f"HTML report written to: {html_path}")
+            
+        # PDF report
+        pdf_path = report_pdf_override or config.output.pdf_report_path
+        if pdf_path:
+            pdf_reporter = PDFReporter()
+            pdf_reporter.write(summary, pdf_path)
+            logger.info(f"PDF report written to: {pdf_path}")
+            
     except Exception as e:
         logger.error(f"Error generating reports: {e}")
         return 1

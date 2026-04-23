@@ -52,6 +52,9 @@ htmlcov/
 # Security Audit Tool - Generated Reports
 security_audit_*.json
 security_audit_*.html
+audit_report_*.json
+audit_report_*.html
+audit_report_*.pdf
 *.audit.log
 
 # Local configuration

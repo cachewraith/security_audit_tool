@@ -87,6 +87,7 @@ class OutputConfig:
     # Report paths (None = don't generate)
     json_report_path: Optional[Path] = None
     html_report_path: Optional[Path] = None
+    pdf_report_path: Optional[Path] = None
     log_path: Optional[Path] = None
 
 
@@ -175,6 +176,7 @@ class Config:
             out = data["output"]
             json_path = out.get("json_report_path")
             html_path = out.get("html_report_path")
+            pdf_path = out.get("pdf_report_path")
             log_path = out.get("log_path")
             
             config.output = OutputConfig(
@@ -185,6 +187,7 @@ class Config:
                 max_findings_in_summary=out.get("max_findings_in_summary", 50),
                 json_report_path=Path(json_path) if json_path else None,
                 html_report_path=Path(html_path) if html_path else None,
+                pdf_report_path=Path(pdf_path) if pdf_path else None,
                 log_path=Path(log_path) if log_path else None,
             )
         
@@ -235,6 +238,7 @@ class Config:
                 "max_findings_in_summary": self.output.max_findings_in_summary,
                 "json_report_path": str(self.output.json_report_path) if self.output.json_report_path else None,
                 "html_report_path": str(self.output.html_report_path) if self.output.html_report_path else None,
+                "pdf_report_path": str(self.output.pdf_report_path) if self.output.pdf_report_path else None,
                 "log_path": str(self.output.log_path) if self.output.log_path else None,
             },
         }

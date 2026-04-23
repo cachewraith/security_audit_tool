@@ -127,6 +127,11 @@ For more information, see README.md
         help="Write HTML report to specified file",
     )
     output_group.add_argument(
+        "--report-pdf",
+        type=Path,
+        help="Write PDF report to specified file",
+    )
+    output_group.add_argument(
         "--log-file",
         type=Path,
         help="Write structured logs to specified file",
@@ -204,7 +209,13 @@ For more information, see README.md
 
 def confirm_authorization() -> bool:
     """Display legal warning and confirm authorization interactively."""
-    print(LEGAL_WARNING)
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+    
+    console = Console()
+    console.print("\n")
+    console.print(Panel(Text.from_markup(LEGAL_WARNING.strip()), title="[bold red]LEGAL WARNING[/]", border_style="red"))
     
     while True:
         try:
@@ -337,6 +348,13 @@ def apply_full_scan_options(args: argparse.Namespace) -> None:
             args.report_json = Path(f"security_audit_{timestamp}.json")
         if not args.report_html:
             args.report_html = Path(f"security_audit_{timestamp}.html")
+        if not args.report_pdf:
+            # Try Downloads folder first
+            downloads = Path.home() / "Downloads"
+            if downloads.exists():
+                args.report_pdf = downloads / f"security_audit_{timestamp}.pdf"
+            else:
+                args.report_pdf = Path(f"security_audit_{timestamp}.pdf")
 
         # Enable verbose output
         args.verbose = True
@@ -366,6 +384,9 @@ def build_config_from_args(args: argparse.Namespace) -> Config:
     
     if args.report_html:
         config.output.html_report_path = args.report_html
+    
+    if args.report_pdf:
+        config.output.pdf_report_path = args.report_pdf
     
     if args.log_file:
         config.output.log_path = args.log_file
