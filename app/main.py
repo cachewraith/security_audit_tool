@@ -15,7 +15,7 @@ from .cli import (
 from .config import Config
 from .scope import ScopeManager, ScopeError
 from .logging_setup import setup_logging, log_audit_start, log_audit_end
-from .models import AuditSummary, Scope
+from .models import AuditSummary, Scope, SeverityLevel
 from .checks import (
     PermissionsCheck,
     ServicesCheck,
