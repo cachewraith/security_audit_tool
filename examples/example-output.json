@@ -1,0 +1,172 @@
+{
+  "report_metadata": {
+    "generated_at": "2024-01-15T10:30:45.123456",
+    "version": "1.0.0",
+    "format": "json"
+  },
+  "audit_summary": {
+    "start_time": "2024-01-15T10:30:00.000000",
+    "end_time": "2024-01-15T10:30:45.000000",
+    "duration_seconds": 45.0,
+    "target_count": 3,
+    "findings_count": 7,
+    "errors_count": 0,
+    "severity_counts": {
+      "critical": 1,
+      "high": 2,
+      "medium": 3,
+      "low": 1,
+      "info": 0
+    },
+    "category_counts": {
+      "permissions": 2,
+      "services": 1,
+      "firewall": 1,
+      "hardening": 2,
+      "secrets": 1,
+      "dependencies": 0,
+      "tls": 0,
+      "containers": 0,
+      "webapp_config": 0,
+      "network": 0
+    },
+    "findings": [
+      {
+        "id": "a1b2c3d4",
+        "title": "Debug mode enabled in production configuration",
+        "category": "webapp_config",
+        "severity": "critical",
+        "confidence": "certain",
+        "target": "/home/user/project/config.py",
+        "evidence": "Line 15: DEBUG = True",
+        "remediation": "Set DEBUG = False in production",
+        "references": [
+          "https://docs.djangoproject.com/en/stable/ref/settings/#debug",
+          "https://cheatsheetseries.owasp.org/cheatsheets/Django_Security_Cheat_Sheet.html"
+        ],
+        "timestamp": "2024-01-15T10:30:05.123456",
+        "check_id": "webapp_config",
+        "metadata": {
+          "file_type": "python",
+          "line": 15,
+          "pattern": "debug_true"
+        }
+      },
+      {
+        "id": "e5f6g7h8",
+        "title": "World-writable file in sensitive directory",
+        "category": "permissions",
+        "severity": "high",
+        "confidence": "certain",
+        "target": "/home/user/project/logs/application.log",
+        "evidence": "File permissions: rw-rw-rw- (mode: 0o100666)",
+        "remediation": "Remove world-writable permission: chmod o-w logs/application.log",
+        "references": [
+          "https://wiki.debian.org/Permissions"
+        ],
+        "timestamp": "2024-01-15T10:30:08.456789",
+        "check_id": "permissions",
+        "metadata": {
+          "owner_uid": 1000,
+          "has_suid": false,
+          "has_sgid": false
+        }
+      },
+      {
+        "id": "i9j0k1l2",
+        "title": "SSH root login is permitted",
+        "category": "hardening",
+        "severity": "high",
+        "confidence": "certain",
+        "target": "/etc/ssh/sshd_config",
+        "evidence": "PermitRootLogin is enabled: PermitRootLogin yes",
+        "remediation": "Disable root login: PermitRootLogin no in /etc/ssh/sshd_config",
+        "references": [
+          "https://www.ssh.com/ssh/sshd_config/"
+        ],
+        "timestamp": "2024-01-15T10:30:12.789012",
+        "check_id": "hardening",
+        "metadata": {
+          "line": 32
+        }
+      },
+      {
+        "id": "m3n4o5p6",
+        "title": "UFW firewall is not active",
+        "category": "firewall",
+        "severity": "medium",
+        "confidence": "certain",
+        "target": "ufw",
+        "evidence": "UFW status shows 'inactive'",
+        "remediation": "Enable UFW: sudo ufw enable",
+        "references": [
+          "https://help.ubuntu.com/community/UFW"
+        ],
+        "timestamp": "2024-01-15T10:30:15.345678",
+        "check_id": "firewall",
+        "metadata": {}
+      },
+      {
+        "id": "q7r8s9t0",
+        "title": "Potential API key pattern detected",
+        "category": "secrets",
+        "severity": "medium",
+        "confidence": "tentative",
+        "target": "/home/user/project/config/settings.py",
+        "evidence": "Pattern 'api_key_generic' detected at line 42 (content redacted for security)",
+        "remediation": "Use environment variables or a secrets manager",
+        "references": [
+          "https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure",
+          "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+        ],
+        "timestamp": "2024-01-15T10:30:18.901234",
+        "check_id": "secrets",
+        "metadata": {
+          "pattern_type": "api_key_generic",
+          "line_number": 42,
+          "file_size": 2048
+        }
+      },
+      {
+        "id": "u1v2w3x4",
+        "title": "Unpinned dependency detected",
+        "category": "dependencies",
+        "severity": "medium",
+        "confidence": "medium",
+        "target": "requests (no version specified)",
+        "evidence": "Package 'requests' has no version constraint specified",
+        "remediation": "Pin dependency version: requests==2.31.0",
+        "references": [
+          "https://pip.pypa.io/en/stable/topics/repeatable-installs/"
+        ],
+        "timestamp": "2024-01-15T10:30:22.567890",
+        "check_id": "dependencies",
+        "metadata": {
+          "package": "requests",
+          "manager": "pip"
+        }
+      },
+      {
+        "id": "y5z6a7b8",
+        "title": "SUID binary detected",
+        "category": "permissions",
+        "severity": "low",
+        "confidence": "high",
+        "target": "/usr/bin/passwd",
+        "evidence": "SUID binary owned by root: rwsr-xr-x",
+        "remediation": "Review if SUID bit is necessary; use sudo where possible",
+        "references": [
+          "https://www.redhat.com/sysadmin/suid-sgid-sticky-bit"
+        ],
+        "timestamp": "2024-01-15T10:30:25.123456",
+        "check_id": "permissions",
+        "metadata": {
+          "owner_uid": 0,
+          "has_suid": true,
+          "has_sgid": false
+        }
+      }
+    ],
+    "errors": []
+  }
+}

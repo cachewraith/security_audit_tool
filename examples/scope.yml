@@ -1,0 +1,97 @@
+# Security Audit Tool - Example Scope Configuration
+# 
+# This file defines the scope of authorized targets for the security audit.
+# Only targets explicitly listed here will be scanned.
+#
+# IMPORTANT: Verify you have proper authorization before scanning any target.
+
+# Enable local endpoint scanning
+# This includes the machine where the tool is running
+local_endpoint: true
+
+# List of project directories to audit
+# These paths will be checked for configuration issues, dependencies, etc.
+project_paths:
+  - /home/user/projects/my-web-app
+  - /home/user/projects/api-service
+  - ./relative/path/to/project
+
+# List of allowed hosts for network checks
+# Supports:
+#   - IP addresses (192.168.1.1)
+#   - Hostnames (server.example.com)
+#   - CIDR notation (192.168.1.0/24)
+#   - Wildcards (*.example.com)
+allowed_hosts:
+  # Local development
+  - 127.0.0.1
+  - localhost
+  - ::1
+  
+  # Internal network (authorized only!)
+  - 192.168.1.0/24
+  - 10.0.0.0/8
+  
+  # Specific servers (must be authorized!)
+  - dev-server.example.com
+  - staging.example.com
+  
+  # Wildcard domain (must be authorized!)
+  - *.internal.example.com
+
+# Container images to check
+# These images will be analyzed for security configuration
+container_images:
+  - myapp:latest
+  - nginx:stable
+  - redis:7-alpine
+
+# Running container IDs to check
+# These containers will be inspected for runtime security settings
+container_ids:
+  # Docker container IDs (short or long form)
+  - abc123def456
+  - 789xyz012345
+
+# Paths to exclude from filesystem checks
+# Use these to skip directories that aren't relevant or cause noise
+exclude_paths:
+  # Dependencies
+  - node_modules/
+  - vendor/
+  - __pycache__/
+  
+  # Version control
+  - .git/
+  - .svn/
+  
+  # Build artifacts
+  - build/
+  - dist/
+  - target/
+  
+  # Logs
+  - *.log
+  - logs/
+  
+  # Temporary files
+  - *.tmp
+  - *.bak
+  - *.swp
+  
+  # IDE files
+  - .idea/
+  - .vscode/
+  - *.iml
+
+# Maximum recursion depth for directory traversal
+# Prevents excessive scanning of deep directory structures
+max_depth: 10
+
+# Example Usage:
+#
+#   security-audit --scope-file scope.yml
+#
+#   security-audit --scope-file scope.yml --report-json results.json
+#
+#   security-audit --scope-file scope.yml --enable-tls-checks

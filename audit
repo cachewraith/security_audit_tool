@@ -1,0 +1,4 @@
+#!/bin/bash
+# Simple wrapper to run security-audit tool
+
+./venv/bin/security-audit "$@"
