@@ -6,6 +6,7 @@ from pathlib import Path
 
 from . import LEGAL_WARNING
 from .config import Config
+from .utils import validate_url, validate_host
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -311,6 +312,23 @@ def validate_args(args: argparse.Namespace) -> tuple[bool, list[str]]:
                 errors.append(f"Project path does not exist: {p}")
             elif not p.is_dir():
                 errors.append(f"Project path is not a directory: {p}")
+
+    # Validate URLs
+    if args.url:
+        for url in args.url:
+            url_errors = validate_url(url, allowed_schemes=["http", "https"])
+            # If URL validation fails due to missing scheme, try hostname validation
+            if url_errors and "missing scheme" in " ".join(url_errors).lower():
+                url_errors = validate_host(url)
+            if url_errors:
+                errors.append(f"Invalid URL or hostname '{url}': {', '.join(url_errors)}")
+
+    # Validate hosts
+    if args.host:
+        for host in args.host:
+            host_errors = validate_host(host)
+            if host_errors:
+                errors.append(f"Invalid hostname '{host}': {', '.join(host_errors)}")
     
     # Validate rate limiting
     if args.max_concurrent < 1:
@@ -349,12 +367,10 @@ def apply_full_scan_options(args: argparse.Namespace) -> None:
         if not args.report_html:
             args.report_html = Path(f"security_audit_{timestamp}.html")
         if not args.report_pdf:
-            # Try Downloads folder first
-            downloads = Path.home() / "Downloads"
-            if downloads.exists():
-                args.report_pdf = downloads / f"security_audit_{timestamp}.pdf"
-            else:
-                args.report_pdf = Path(f"security_audit_{timestamp}.pdf")
+            # Use cross-platform Downloads folder path
+            from .utils import get_downloads_path
+            downloads = get_downloads_path()
+            args.report_pdf = downloads / f"security_audit_{timestamp}.pdf"
 
         # Enable verbose output
         args.verbose = True

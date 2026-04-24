@@ -1,5 +1,7 @@
 """Input validation utilities."""
 
+import os
+import platform
 import re
 import ipaddress
 from pathlib import Path
@@ -57,21 +59,21 @@ def validate_scope(scope: dict) -> list[str]:
 
 def validate_host(host: str) -> list[str]:
     """Validate a host string (hostname, IP, or CIDR).
-    
+
     Returns list of validation errors (empty if valid).
     """
     errors = []
-    
+
     if not host:
         errors.append("Host cannot be empty")
         return errors
-    
+
     # Check for suspicious characters
     suspicious = [";", "|", "&", "$", "`", "\n", "\r"]
     for char in suspicious:
         if char in host:
             errors.append(f"Host contains suspicious character: {repr(char)}")
-    
+
     # Check if it's a CIDR notation
     if "/" in host:
         try:
@@ -80,14 +82,14 @@ def validate_host(host: str) -> list[str]:
         except ValueError:
             errors.append("Invalid CIDR notation")
             return errors
-    
+
     # Check if it's an IP address
     try:
         ipaddress.ip_address(host)
         return errors  # Valid IP
     except ValueError:
         pass
-    
+
     # Validate as hostname
     if not is_valid_hostname(host):
         # Check for wildcard patterns
@@ -98,11 +100,27 @@ def validate_host(host: str) -> list[str]:
                 errors.append("Invalid wildcard hostname pattern")
         else:
             errors.append("Invalid hostname format")
-    
+
     # Check hostname length
     if len(host) > 253:
         errors.append("Hostname exceeds maximum length (253 characters)")
-    
+
+    # Additional check: Reject obviously fake or repetitive hostnames
+    # Check for repeated characters (like "ssssssssssssss")
+    if len(host) > 5:
+        char_counts = {}
+        for char in host.lower():
+            char_counts[char] = char_counts.get(char, 0) + 1
+        # If 80% or more of the characters are the same, it's likely fake
+        max_count = max(char_counts.values())
+        if max_count / len(host) >= 0.8:
+            errors.append("Hostname appears to be invalid or repetitive")
+
+    # Check for minimum reasonable hostname structure
+    # Require at least one dot for domain names (not localhost or single-word hosts)
+    if "." not in host and host.lower() not in ["localhost"]:
+        errors.append("Hostname must be a domain name (e.g., example.com) or IP address")
+
     return errors
 
 
@@ -264,3 +282,40 @@ def is_safe_filename(filename: str) -> bool:
         return False
     
     return True
+
+
+def get_downloads_path() -> Path:
+    """Get the Downloads folder path for the current platform.
+    
+    Returns the Downloads folder path if it exists, otherwise returns
+    the current working directory as a fallback.
+    
+    This function handles cross-platform differences:
+    - Windows: Uses %USERPROFILE%\\Downloads
+    - macOS: Uses ~/Downloads
+    - Linux: Uses ~/Downloads
+    """
+    system = platform.system()
+    
+    # Try platform-specific paths
+    if system == "Windows":
+        # On Windows, try multiple possible locations
+        possible_paths = [
+            Path.home() / "Downloads",
+            Path(os.environ.get("USERPROFILE", "")) / "Downloads" if os.environ.get("USERPROFILE") else None,
+            Path(os.path.expanduser("~")) / "Downloads",
+        ]
+    else:
+        # macOS and Linux typically use ~/Downloads
+        possible_paths = [
+            Path.home() / "Downloads",
+            Path(os.path.expanduser("~")) / "Downloads",
+        ]
+    
+    # Filter out None values and check which path exists
+    for path in possible_paths:
+        if path and path.exists() and path.is_dir():
+            return path
+    
+    # Fallback to current working directory if Downloads folder doesn't exist
+    return Path.cwd()
