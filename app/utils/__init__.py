@@ -1,7 +1,13 @@
 """Utility modules for safe subprocess execution, validation, and timeouts."""
 
 from .subprocess_safe import run_safe, run_safe_with_timeout, SafeSubprocessError
-from .validators import validate_scope, validate_host, validate_path
+from .validators import (
+    validate_scope,
+    validate_host,
+    validate_path,
+    validate_url,
+    get_downloads_path,
+)
 from .timeouts import TimeoutManager, timeout_decorator
 
 __all__ = [
@@ -11,6 +17,8 @@ __all__ = [
     "validate_scope",
     "validate_host",
     "validate_path",
+    "validate_url",
+    "get_downloads_path",
     "TimeoutManager",
     "timeout_decorator",
 ]

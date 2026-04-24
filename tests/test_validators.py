@@ -10,6 +10,7 @@ from app.utils.validators import (
     validate_path,
     sanitize_input,
     is_safe_filename,
+    get_downloads_path,
 )
 
 
@@ -174,3 +175,35 @@ class TestValidateScope:
         }
         errors = validate_scope(scope)
         assert any("max_depth" in e.lower() for e in errors)
+
+
+class TestGetDownloadsPath:
+    """Tests for get_downloads_path function."""
+    
+    def test_returns_path_object(self) -> None:
+        """Test that get_downloads_path returns a Path object."""
+        result = get_downloads_path()
+        assert isinstance(result, Path)
+    
+    def test_path_exists(self) -> None:
+        """Test that the returned path exists."""
+        result = get_downloads_path()
+        assert result.exists()
+    
+    def test_path_is_directory(self) -> None:
+        """Test that the returned path is a directory."""
+        result = get_downloads_path()
+        assert result.is_dir()
+    
+    def test_fallback_to_cwd(self, tmp_path: Path) -> None:
+        """Test that function falls back to current directory if Downloads doesn't exist."""
+        import os
+        import platform
+        from unittest.mock import patch
+        
+        # Mock the platform to simulate a system where Downloads doesn't exist
+        with patch('app.utils.validators.platform.system', return_value='Linux'):
+            with patch('app.utils.validators.Path.home', return_value=tmp_path):
+                with patch('app.utils.validators.Path.cwd', return_value=tmp_path):
+                    result = get_downloads_path()
+                    assert result == tmp_path
