@@ -22,7 +22,6 @@ from rich.console import Console, Group
 from rich.layout import Layout
 from rich.panel import Panel
 from rich.progress_bar import ProgressBar
-from rich.prompt import Confirm
 from rich.table import Table
 from rich.text import Text
 
@@ -35,7 +34,7 @@ from .core.scan_modes import (
     enable_checks,
     get_scan_mode_definition,
 )
-from .models import ScanMode, Scope
+from .models import AuditSummary, Finding, ScanMode, Scope, SeverityLevel
 from .report.terminal_reporter import TerminalReporter
 from .scope import ScopeManager
 from .utils import validate_host, validate_path, validate_url
@@ -124,6 +123,7 @@ class TUI:
         self.reporter = TerminalReporter(use_colors=sys.stdout.isatty())
         self.config = Config()
         self.theme = THEME
+        self._last_summary: AuditSummary | None = None
 
     def _package_version(self) -> str:
         """Return the installed package version or a fallback."""
@@ -593,6 +593,16 @@ class TUI:
             )
             return ScopeManager.from_args(urls=[target]), "website"
 
+        if mode == ScanMode.OWASP_TOP_10_REVIEW:
+            target = self._prompt_url_target(
+                "OWASP Top 10 Target",
+                "Enter the website URL or hostname you want to review against an OWASP-focused baseline.",
+                mode=mode,
+                scope=None,
+                target_family="website",
+            )
+            return ScopeManager.from_args(urls=[target]), "website"
+
         if mode == ScanMode.API_REVIEW:
             target = self._prompt_url_target(
                 "API Target",
@@ -738,6 +748,7 @@ class TUI:
             try:
                 if step == 0:
                     self.config = Config()
+                    self._last_summary = None
                     mode = self._select_mode()
                     apply_scan_mode(self.config, mode)
                     step = 1
@@ -1138,6 +1149,8 @@ class TUI:
 
                 try:
                     result = scan_func(*args, **kwargs)
+                    if isinstance(result, AuditSummary):
+                        self._last_summary = result
                     with lock:
                         state.finished = True
                         state.current_message = "Rendering reports"
@@ -1156,11 +1169,10 @@ class TUI:
                     stop_refresh.set()
                     refresher.join(timeout=1.0)
 
-    def wait_for_user(self) -> bool:
-        """Wait for the user to continue or exit."""
-        self._show_screen(
-            title="Scan Complete",
-            body=Group(
+    def _build_completion_body(self, summary: AuditSummary | None) -> Group:
+        """Render the completion view with a full findings list when available."""
+        if summary is None:
+            return Group(
                 Text(
                     "The audit finished and reports have been written where configured.",
                     style=self.theme["text"],
@@ -1169,26 +1181,268 @@ class TUI:
                     "You can launch another scan from this workspace immediately.",
                     style=self.theme["muted"],
                 ),
+            )
+
+        overview = Table.grid(expand=False, padding=(0, 2))
+        overview.add_column(style=f"bold {self.theme['muted']}", width=10)
+        overview.add_column(style=self.theme["text"])
+        overview.add_row("Findings", str(len(summary.findings)))
+        overview.add_row("Targets", str(summary.target_count))
+        overview.add_row("Errors", str(len(summary.errors)))
+        overview.add_row("Duration", f"{summary.duration_seconds:.2f}s")
+
+        if not summary.findings:
+            return Group(
+                Text("The audit finished and no findings were detected.", style=self.theme["text"]),
+                Text("Reports have been written where configured.", style=self.theme["muted"]),
+                Text("Enter y to launch another scan or q to exit.", style=self.theme["muted"]),
+                Text(""),
+                Panel(
+                    overview,
+                    title=f"[bold {self.theme['secondary']}]Summary[/]",
+                    border_style=self.theme["border"],
+                    box=box.ROUNDED,
+                ),
+            )
+
+        findings_table = Table(expand=True, box=box.SIMPLE_HEAVY)
+        findings_table.add_column("#", width=4, style=f"bold {self.theme['primary']}")
+        findings_table.add_column("Severity", width=10)
+        findings_table.add_column("Title", style=self.theme["text"], ratio=3)
+        findings_table.add_column("Target", style=self.theme["muted"], ratio=2)
+
+        severity_style = {
+            SeverityLevel.CRITICAL: self.theme["error"],
+            SeverityLevel.HIGH: self.theme["warning"],
+            SeverityLevel.MEDIUM: self.theme["primary"],
+            SeverityLevel.LOW: self.theme["accent"],
+            SeverityLevel.INFO: self.theme["muted"],
+        }
+
+        sorted_findings = self._sorted_findings(summary)
+
+        for index, finding in enumerate(sorted_findings, start=1):
+            findings_table.add_row(
+                str(index),
+                Text(finding.severity.value.upper(), style=f"bold {severity_style.get(finding.severity, self.theme['text'])}"),
+                Text(finding.title),
+                Text(str(finding.target)),
+            )
+
+        sections: list[Any] = [
+            Text("The audit finished and these findings were detected:", style=self.theme["text"]),
+            Text("Reports have been written where configured.", style=self.theme["muted"]),
+            Text(
+                "Enter a finding number to view the full detail message, y for another scan, or q to exit.",
+                style=self.theme["muted"],
             ),
-            current_step=4,
-            subtitle="Session wrap-up",
+            Text(""),
+            Panel(
+                overview,
+                title=f"[bold {self.theme['secondary']}]Summary[/]",
+                border_style=self.theme["border"],
+                box=box.ROUNDED,
+            ),
+            Text(""),
+            findings_table,
+        ]
+
+        if summary.errors:
+            error_lines = "\n".join(f"• {error}" for error in summary.errors[:5])
+            if len(summary.errors) > 5:
+                error_lines += f"\n• +{len(summary.errors) - 5} more errors"
+            sections.extend(
+                [
+                    Text(""),
+                    Panel(
+                        Text(error_lines, style=self.theme["text"]),
+                        title=f"[bold {self.theme['warning']}]Errors[/]",
+                        border_style=self.theme["border"],
+                        box=box.ROUNDED,
+                    ),
+                ]
+            )
+
+        return Group(*sections)
+
+    def _sorted_findings(self, summary: AuditSummary) -> list[Finding]:
+        """Return findings in the same stable order used by the completion table."""
+        severity_order = {
+            SeverityLevel.CRITICAL: 0,
+            SeverityLevel.HIGH: 1,
+            SeverityLevel.MEDIUM: 2,
+            SeverityLevel.LOW: 3,
+            SeverityLevel.INFO: 4,
+        }
+        return sorted(
+            summary.findings,
+            key=lambda finding: (
+                severity_order.get(finding.severity, 99),
+                finding.category.value,
+                finding.title.lower(),
+            ),
         )
 
-        try:
-            choice = Confirm.ask(
-                "[bold #7dd3fc]▶[/] Another scan?",
-                default=True,
+    def _build_finding_detail_body(self, finding: Finding, index: int, total: int) -> Group:
+        """Render a detailed view for a single finding."""
+        details = Table.grid(expand=False, padding=(0, 2))
+        details.add_column(style=f"bold {self.theme['muted']}", width=12)
+        details.add_column(style=self.theme["text"], ratio=1)
+        details.add_row("Finding", f"{index}/{total}")
+        details.add_row("Severity", finding.severity.value.upper())
+        details.add_row("Category", finding.category.value.replace("_", " ").title())
+        details.add_row("Target", str(finding.target))
+        details.add_row("Confidence", finding.confidence.value.title())
+        details.add_row("Check", finding.check_id or "unknown")
+
+        sections: list[Any] = [
+            Text(finding.title, style=f"bold {self.theme['text']}"),
+            Text("This view shows the full detail message for the selected finding.", style=self.theme["muted"]),
+            Text(""),
+            Panel(
+                details,
+                title=f"[bold {self.theme['secondary']}]Finding Summary[/]",
+                border_style=self.theme["border"],
+                box=box.ROUNDED,
+            ),
+            Text(""),
+            Panel(
+                Text(finding.evidence or "No evidence was recorded.", style=self.theme["text"]),
+                title=f"[bold {self.theme['secondary']}]What We Found[/]",
+                border_style=self.theme["border"],
+                box=box.ROUNDED,
+                padding=(1, 2),
+            ),
+            Text(""),
+            Panel(
+                Text(finding.remediation or "No remediation was recorded.", style=self.theme["text"]),
+                title=f"[bold {self.theme['accent']}]Recommended Fix[/]",
+                border_style=self.theme["border"],
+                box=box.ROUNDED,
+                padding=(1, 2),
+            ),
+        ]
+
+        if finding.references:
+            sections.extend(
+                [
+                    Text(""),
+                    Panel(
+                        Text("\n".join(f"• {reference}" for reference in finding.references), style=self.theme["text"]),
+                        title=f"[bold {self.theme['secondary']}]References[/]",
+                        border_style=self.theme["border"],
+                        box=box.ROUNDED,
+                        padding=(1, 2),
+                    ),
+                ]
             )
+
+        if finding.metadata:
+            metadata_lines = [
+                f"{key}: {value}"
+                for key, value in sorted(finding.metadata.items(), key=lambda item: item[0])
+            ]
+            sections.extend(
+                [
+                    Text(""),
+                    Panel(
+                        Text("\n".join(metadata_lines), style=self.theme["text"]),
+                        title=f"[bold {self.theme['secondary']}]Extra Context[/]",
+                        border_style=self.theme["border"],
+                        box=box.ROUNDED,
+                        padding=(1, 2),
+                    ),
+                ]
+            )
+
+        sections.extend(
+            [
+                Text(""),
+                Text("Press Enter to return to the findings list.", style=self.theme["muted"]),
+            ]
+        )
+
+        return Group(*sections)
+
+    def _wait_for_enter(self, message: str = "Press Enter to continue") -> None:
+        """Pause until the user presses Enter."""
+        try:
+            prompt_text = (
+                f"\n\033[96m▶\033[0m {self._plain_prompt_message(message)} "
+                "\033[90m(Ctrl+Left to go back)\033[0m: "
+            )
+            pt_prompt(
+                ANSI(prompt_text),
+                key_bindings=self._create_prompt_bindings(),
+            )
+        except NavigateBack:
+            return
+        except (KeyboardInterrupt, EOFError):
+            self._handle_interrupt()
+            raise
+
+    def _show_finding_detail(self, finding: Finding, index: int, total: int) -> None:
+        """Render the full detail screen for a finding and wait for return."""
+        self._show_screen(
+            title="Finding Detail",
+            body=self._build_finding_detail_body(finding, index, total),
+            current_step=4,
+            subtitle="Detailed finding evidence",
+        )
+        self._wait_for_enter("Press Enter to return to the findings list")
+
+    def wait_for_user(self) -> bool:
+        """Wait for the user to continue or exit."""
+        try:
+            while True:
+                self._show_screen(
+                    title="Scan Complete",
+                    body=self._build_completion_body(self._last_summary),
+                    current_step=4,
+                    subtitle="Session wrap-up",
+                )
+
+                summary = self._last_summary
+                if summary and summary.findings:
+                    sorted_findings = self._sorted_findings(summary)
+                    choices = [str(index) for index in range(1, len(sorted_findings) + 1)] + ["y", "q"]
+                    choice = self._prompt_ask(
+                        "Choose finding # for details, y for another scan, q to exit",
+                        choices=choices,
+                        default="y",
+                    ).lower()
+
+                    if choice == "y":
+                        return True
+                    if choice == "q":
+                        self.console.print(
+                            f"\n[bold {self.theme['secondary']}]Thank you for using CACHE WRAITH. Stay safe.[/]"
+                        )
+                        time.sleep(0.5)
+                        return False
+
+                    finding_index = int(choice) - 1
+                    self._show_finding_detail(
+                        sorted_findings[finding_index],
+                        finding_index + 1,
+                        len(sorted_findings),
+                    )
+                    continue
+
+                choice = self._prompt_ask(
+                    "Another scan? [y/q]",
+                    choices=["y", "q"],
+                    default="y",
+                ).lower()
+                if choice == "y":
+                    return True
+                self.console.print(
+                    f"\n[bold {self.theme['secondary']}]Thank you for using CACHE WRAITH. Stay safe.[/]"
+                )
+                time.sleep(0.5)
+                return False
         except (KeyboardInterrupt, EOFError):
             self.console.print(
                 f"\n[bold {self.theme['secondary']}]Exiting CACHE WRAITH. Stay safe.[/]"
             )
             return False
-
-        if not choice:
-            self.console.print(
-                f"\n[bold {self.theme['secondary']}]Thank you for using CACHE WRAITH. Stay safe.[/]"
-            )
-            time.sleep(0.5)
-
-        return choice

@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from ..checks import BaseCheck
 from ..config import Config
-from ..models import AuditSummary, Scope, SeverityLevel
+from ..models import AuditSummary, CheckExecution, Scope, SeverityLevel
 from .check_registry import get_available_checks
 
 CHECK_ENABLEMENT: dict[str, str] = {
@@ -28,6 +28,20 @@ CHECK_ENABLEMENT: dict[str, str] = {
 }
 
 ProgressCallback = Callable[[dict[str, Any]], None]
+
+
+def build_check_execution(check: BaseCheck, result: "CheckResult") -> CheckExecution:
+    """Convert a check result into report-friendly execution metadata."""
+    return CheckExecution(
+        check_id=check.check_id,
+        check_name=check.check_name,
+        category=check.category.value,
+        passed=result.passed,
+        findings_count=result.findings_count,
+        errors=list(result.errors),
+        duration_seconds=result.duration_seconds,
+        metadata=dict(result.metadata),
+    )
 
 
 def is_check_enabled(check_class: type[BaseCheck], config: Config) -> bool:
@@ -103,6 +117,7 @@ def run_checks(
             result = check.run()
 
             summary.findings.extend(result.findings)
+            summary.check_results.append(build_check_execution(check, result))
 
             for error in result.errors:
                 message = f"{check_class.check_id}: {error}"
@@ -132,6 +147,17 @@ def run_checks(
         except Exception as exc:
             error_message = f"Check {check_class.check_id} failed: {exc}"
             summary.errors.append(error_message)
+            summary.check_results.append(
+                CheckExecution(
+                    check_id=check_class.check_id,
+                    check_name=check_class.check_name,
+                    category=check_class.category.value,
+                    passed=False,
+                    findings_count=0,
+                    errors=[str(exc)],
+                    duration_seconds=0.0,
+                )
+            )
             logger.exception(error_message)
             if progress_callback:
                 progress_callback(

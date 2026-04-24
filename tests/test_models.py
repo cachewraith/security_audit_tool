@@ -7,6 +7,7 @@ from pathlib import Path
 from app.models import (
     Finding,
     AuditSummary,
+    CheckExecution,
     Scope,
     SeverityLevel,
     ConfidenceLevel,
@@ -146,6 +147,29 @@ class TestAuditSummary:
         assert counts[Category.PERMISSIONS] == 2
         assert counts[Category.SECRETS] == 1
         assert counts[Category.HARDENING] == 0
+
+    def test_summary_to_dict_includes_check_results(self) -> None:
+        """Serialized summaries should include per-check execution metadata."""
+        summary = AuditSummary(
+            start_time=datetime.utcnow(),
+            check_results=[
+                CheckExecution(
+                    check_id="performance",
+                    check_name="Performance Test",
+                    category="network",
+                    passed=False,
+                    findings_count=1,
+                    duration_seconds=30.0,
+                    metadata={"stage_names": ["warmup", "baseline", "sustained"]},
+                )
+            ],
+        )
+
+        data = summary.to_dict()
+
+        assert data["check_results"][0]["check_id"] == "performance"
+        assert data["check_results"][0]["duration_seconds"] == 30.0
+        assert data["check_results"][0]["metadata"]["stage_names"] == ["warmup", "baseline", "sustained"]
 
 
 class TestScope:

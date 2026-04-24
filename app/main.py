@@ -57,6 +57,7 @@ def main(args: list[str] | None = None) -> int:
                 config=config,
                 scope_manager=scope_manager,
                 logger=logger,
+                tui=tui,
                 skip_checks=skip_checks,
                 only_checks=only_checks,
             )

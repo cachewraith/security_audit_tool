@@ -16,6 +16,7 @@ def run_audit_workflow(
     config: Config,
     scope_manager: ScopeManager,
     logger: logging.Logger,
+    tui: "TUI | None" = None,
     skip_checks: list[str] | None = None,
     only_checks: list[str] | None = None,
     report_json_override: Path | None = None,
@@ -29,9 +30,9 @@ def run_audit_workflow(
     try:
         from ..tui import TUI
 
-        tui = TUI()
         if not config.output.quiet:
-            summary = tui.run_with_progress(
+            workspace = tui or TUI()
+            summary = workspace.run_with_progress(
                 run_checks,
                 scope=scope_manager.scope,
                 config=config,

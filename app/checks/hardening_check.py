@@ -45,6 +45,9 @@ class HardeningCheck(BaseCheck):
         
         # Check for core dumps
         self._check_core_dumps(result)
+
+        # Check mandatory access control state
+        self._check_mandatory_access_control(result)
         
         # Check SSH configuration
         if self.config.check.check_ssh_config:
@@ -52,6 +55,9 @@ class HardeningCheck(BaseCheck):
         
         # Check for password policies
         self._check_password_policy(result)
+
+        # Check hardening-related mount options
+        self._check_mount_hardening(result)
         
         return self._finish_result(result)
     
@@ -132,6 +138,52 @@ class HardeningCheck(BaseCheck):
                 ],
             )
             result.findings.append(finding)
+
+    def _check_mandatory_access_control(self, result: CheckResult) -> None:
+        """Check whether SELinux or AppArmor is enabled."""
+        selinux_state = None
+
+        try:
+            selinux_result = run_safe(
+                ["getenforce"],
+                capture_output=True,
+            )
+            if selinux_result.returncode == 0:
+                selinux_state = selinux_result.stdout.strip()
+        except (SafeSubprocessError, FileNotFoundError):
+            pass
+
+        apparmor_enabled = None
+        apparmor_path = Path("/sys/module/apparmor/parameters/enabled")
+        if apparmor_path.exists():
+            try:
+                apparmor_enabled = apparmor_path.read_text().strip().lower()
+            except Exception:
+                pass
+
+        if (selinux_state or "").lower() in {"enforcing", "permissive"}:
+            return
+        if apparmor_enabled in {"y", "yes", "1"}:
+            return
+
+        result.findings.append(
+            self._create_finding(
+                title="Mandatory access control does not appear to be active",
+                severity=SeverityLevel.MEDIUM,
+                target="host MAC controls",
+                evidence="Neither SELinux nor AppArmor could be confirmed as enabled on the host",
+                remediation="Enable and maintain SELinux or AppArmor profiles for host and service confinement.",
+                confidence=ConfidenceLevel.MEDIUM,
+                references=[
+                    "https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/9/html/using_selinux/index",
+                    "https://ubuntu.com/server/docs/security-apparmor",
+                ],
+                metadata={
+                    "selinux_state": selinux_state,
+                    "apparmor_enabled": apparmor_enabled,
+                },
+            )
+        )
     
     def _check_security_logging(self, result: CheckResult) -> None:
         """Check if security logging is enabled."""
@@ -336,6 +388,57 @@ class HardeningCheck(BaseCheck):
                 references=["https://wiki.debian.org/PasswordQuality"],
             )
             result.findings.append(finding)
+
+    def _check_mount_hardening(self, result: CheckResult) -> None:
+        """Check common temporary mounts for restrictive options."""
+        mounts_path = Path("/proc/mounts")
+        if not mounts_path.exists():
+            return
+
+        mount_requirements = {
+            "/tmp": {"nodev", "nosuid"},
+            "/var/tmp": {"nodev", "nosuid"},
+            "/dev/shm": {"nodev", "nosuid", "noexec"},
+        }
+
+        try:
+            mounts = mounts_path.read_text().splitlines()
+        except Exception as exc:
+            self._log_error("Error reading /proc/mounts", exc)
+            return
+
+        observed: dict[str, set[str]] = {}
+        for line in mounts:
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            mount_point = parts[1]
+            if mount_point in mount_requirements:
+                observed[mount_point] = set(parts[3].split(","))
+
+        for mount_point, required in mount_requirements.items():
+            options = observed.get(mount_point)
+            if not options:
+                continue
+            missing = sorted(required - options)
+            if not missing:
+                continue
+
+            result.findings.append(
+                self._create_finding(
+                    title=f"Temporary mount is missing hardening flags: {mount_point}",
+                    severity=SeverityLevel.LOW if mount_point != "/dev/shm" else SeverityLevel.MEDIUM,
+                    target=mount_point,
+                    evidence=f"Observed mount options: {', '.join(sorted(options))}; missing: {', '.join(missing)}",
+                    remediation=(
+                        f"Add the recommended mount options for {mount_point}: "
+                        f"{', '.join(sorted(required))}, where application compatibility allows."
+                    ),
+                    confidence=ConfidenceLevel.HIGH,
+                    references=["https://www.kernel.org/doc/html/latest/filesystems/sharedsubtree.html"],
+                    metadata={"mount_point": mount_point, "missing_options": missing},
+                )
+            )
     
     @classmethod
     def get_description(cls) -> str:
@@ -345,8 +448,10 @@ class HardeningCheck(BaseCheck):
         - Automatic security update configuration
         - Security logging (auditd, journald)
         - Core dump restrictions
+        - SELinux/AppArmor status
         - SSH security configuration
         - Password policy enforcement
+        - Temporary filesystem mount hardening
         """
     
     @classmethod

@@ -19,6 +19,7 @@ class HTMLReporter:
         html_parts = [
             self._generate_header(),
             self._generate_summary_section(summary),
+            self._generate_check_execution_section(summary),
             self._generate_findings_section(summary),
             self._generate_footer(summary),
         ]
@@ -322,6 +323,49 @@ class HTMLReporter:
         </div>
 """
         
+        return html
+
+    def _generate_check_execution_section(self, summary: AuditSummary) -> str:
+        """Generate a compact execution summary for each check."""
+        if not summary.check_results:
+            return ""
+
+        html = """
+        <h2>Check Execution</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Check</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Findings</th>
+                    <th>Duration</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+"""
+
+        for check in summary.check_results:
+            notes = []
+            if check.metadata.get("stage_names"):
+                notes.append(f"Stages: {', '.join(check.metadata['stage_names'])}")
+            if check.errors:
+                notes.append(f"Errors: {len(check.errors)}")
+
+            html += f"""                <tr>
+                    <td>{self._escape_html(check.check_name)}</td>
+                    <td>{self._escape_html(check.category.replace('_', ' ').title())}</td>
+                    <td>{'Passed' if check.passed else 'Issues Found'}</td>
+                    <td>{check.findings_count}</td>
+                    <td>{check.duration_seconds:.2f}s</td>
+                    <td>{self._escape_html('; '.join(notes) or 'Completed')}</td>
+                </tr>
+"""
+
+        html += """            </tbody>
+        </table>
+"""
         return html
     
     def _generate_findings_section(self, summary: AuditSummary) -> str:
