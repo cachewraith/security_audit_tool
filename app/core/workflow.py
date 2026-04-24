@@ -26,10 +26,6 @@ def run_audit_workflow(
     scope_summary = scope_manager.get_scope_summary()
     log_audit_start(logger, scope_summary, config.to_dict())
 
-    if not config.output.quiet:
-        print(scope_summary)
-        print()
-
     try:
         from ..tui import TUI
 
@@ -42,6 +38,7 @@ def run_audit_workflow(
                 logger=logger,
                 skip_checks=skip_checks,
                 only_checks=only_checks,
+                scope_summary=scope_summary,
             )
         else:
             summary = run_checks(

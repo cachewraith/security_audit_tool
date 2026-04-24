@@ -28,7 +28,7 @@ version = "1.0.2"  # ← bump this
 rm -rf dist/ build/ *.egg-info
 
 # Build new wheel and sdist
-python -m build
+python -m build or pipx run build
 ```
 
 ### 3. Upload to PyPI
