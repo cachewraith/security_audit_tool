@@ -21,7 +21,7 @@ class RateLimitConfig:
 @dataclass
 class ScanConfig:
     """Scan behavior configuration."""
-    mode: str = "passive_audit"
+    mode: str = "custom"
     max_depth: int = 10
     follow_symlinks: bool = False
     max_file_size_mb: int = 10
@@ -52,6 +52,7 @@ class CheckConfig:
     tls_check: bool = False  # Disabled by default, requires explicit opt-in
     containers_check: bool = True
     webapp_config_check: bool = True
+    website_risk_check: bool = False
 
     # Active tests - these send traffic to targets (pentest mode)
     performance_test: bool = False  # Response time testing
@@ -143,7 +144,7 @@ class Config:
         if "scan" in data:
             sc = data["scan"]
             config.scan = ScanConfig(
-                mode=sc.get("mode", "passive_audit"),
+                mode=sc.get("mode", "custom"),
                 max_depth=sc.get("max_depth", 10),
                 follow_symlinks=sc.get("follow_symlinks", False),
                 max_file_size_mb=sc.get("max_file_size_mb", 10),
@@ -165,6 +166,7 @@ class Config:
                 tls_check=ch.get("tls_check", False),
                 containers_check=ch.get("containers_check", True),
                 webapp_config_check=ch.get("webapp_config_check", True),
+                website_risk_check=ch.get("website_risk_check", False),
                 enable_banner_grabbing=ch.get("enable_banner_grabbing", False),
                 check_sudo_config=ch.get("check_sudo_config", True),
                 check_ssh_config=ch.get("check_ssh_config", True),
@@ -227,6 +229,7 @@ class Config:
                 "tls_check": self.check.tls_check,
                 "containers_check": self.check.containers_check,
                 "webapp_config_check": self.check.webapp_config_check,
+                "website_risk_check": self.check.website_risk_check,
                 "enable_banner_grabbing": self.check.enable_banner_grabbing,
                 "check_sudo_config": self.check.check_sudo_config,
                 "check_ssh_config": self.check.check_ssh_config,

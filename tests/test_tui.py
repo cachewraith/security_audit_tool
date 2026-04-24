@@ -1,6 +1,8 @@
 """Tests for TUI interaction behavior."""
 
-from app.tui import TUI
+import pytest
+
+from app.tui import NavigateBack, TUI
 
 
 class TestTUIInterrupts:
@@ -28,3 +30,15 @@ class TestTUITextPrompt:
         monkeypatch.setattr("app.tui.pt_prompt", lambda *args, **kwargs: "")
 
         assert tui._prompt_ask("Select mode", choices=["1", "2"], default="1") == "1"
+
+    def test_prompt_ask_propagates_back_navigation(self, monkeypatch) -> None:
+        """Ctrl+Left should surface as a back-navigation signal."""
+        tui = TUI()
+
+        def raise_back(*args, **kwargs):
+            raise NavigateBack
+
+        monkeypatch.setattr("app.tui.pt_prompt", raise_back)
+
+        with pytest.raises(NavigateBack):
+            tui._prompt_ask("Select mode", choices=["1", "2"], default="1")

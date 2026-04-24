@@ -166,6 +166,12 @@ class TestValidateScope:
         scope = {"local_endpoint": True}
         errors = validate_scope(scope)
         assert len(errors) == 0 or not any("target" in e.lower() for e in errors)
+
+    def test_scope_with_allowed_urls(self) -> None:
+        """Test scope with explicit HTTP targets."""
+        scope = {"allowed_urls": ["https://example.com/login"]}
+        errors = validate_scope(scope)
+        assert not any("target" in e.lower() for e in errors)
     
     def test_scope_with_invalid_max_depth(self) -> None:
         """Test scope with invalid max_depth."""

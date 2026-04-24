@@ -176,6 +176,12 @@ class TestScope:
         scope = Scope(allowed_hosts=["127.0.0.1", "localhost"])
         
         assert scope.is_empty() is False
+
+    def test_scope_with_urls(self) -> None:
+        """Test scope with explicit allowed URLs."""
+        scope = Scope(allowed_urls=["https://example.com/login"])
+
+        assert scope.is_empty() is False
     
     def test_scope_serialization(self) -> None:
         """Test scope to/from dictionary."""
@@ -183,6 +189,7 @@ class TestScope:
             local_endpoint=True,
             project_paths=[Path("/home/user/project")],
             allowed_hosts=["127.0.0.1"],
+            allowed_urls=["https://example.com/login"],
             max_depth=5,
         )
         
@@ -191,12 +198,14 @@ class TestScope:
         assert data["local_endpoint"] is True
         assert data["project_paths"] == ["/home/user/project"]
         assert data["allowed_hosts"] == ["127.0.0.1"]
+        assert data["allowed_urls"] == ["https://example.com/login"]
         assert data["max_depth"] == 5
         
         # Test deserialization
         restored = Scope.from_dict(data)
         assert restored.local_endpoint is True
         assert len(restored.project_paths) == 1
+        assert restored.allowed_urls == ["https://example.com/login"]
         assert restored.max_depth == 5
 
 

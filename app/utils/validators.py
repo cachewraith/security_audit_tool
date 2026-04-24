@@ -23,6 +23,7 @@ def validate_scope(scope: dict) -> list[str]:
         scope.get("local_endpoint"),
         scope.get("project_paths"),
         scope.get("allowed_hosts"),
+        scope.get("allowed_urls"),
         scope.get("container_images"),
         scope.get("container_ids"),
     ])
@@ -48,6 +49,11 @@ def validate_scope(scope: dict) -> list[str]:
     for host in scope.get("allowed_hosts", []):
         host_errors = validate_host(host)
         errors.extend([f"Host '{host}': {e}" for e in host_errors])
+
+    # Validate URLs
+    for url in scope.get("allowed_urls", []):
+        url_errors = validate_url(url, allowed_schemes=["http", "https"])
+        errors.extend([f"URL '{url}': {e}" for e in url_errors])
     
     # Validate max_depth
     max_depth = scope.get("max_depth", 10)

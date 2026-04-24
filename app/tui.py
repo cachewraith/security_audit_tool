@@ -9,6 +9,7 @@ from typing import Any, Optional, Tuple
 
 from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.key_binding import KeyBindings
 from rich import box
 from rich.align import Align
 from rich.console import Console, Group
@@ -25,10 +26,10 @@ from rich.table import Table
 from rich.text import Text
 
 from .config import Config
-from .core.scan_modes import SCAN_MODE_DEFINITIONS, apply_scan_mode
+from .core.scan_modes import SCAN_MODE_DEFINITIONS, apply_scan_mode, enable_checks
 from .models import ScanMode
 from .report.terminal_reporter import TerminalReporter
-from .utils import validate_url, validate_host
+from .utils import validate_url, validate_host, validate_path
 from .scope import ScopeManager
 
 
@@ -44,6 +45,10 @@ THEME = {
     "border": "cyan",
     "prompt": "bright_cyan",
 }
+
+
+class NavigateBack(Exception):
+    """Raised when the user requests to go back to the previous step."""
 
 
 class TUI:
@@ -143,6 +148,16 @@ class TUI:
         """Remove Rich tags for prompt_toolkit."""
         return self.RICH_TAG_RE.sub("", message).strip()
 
+    def _create_prompt_bindings(self) -> KeyBindings:
+        """Create prompt-toolkit key bindings for navigation."""
+        bindings = KeyBindings()
+
+        @bindings.add("c-left")
+        def _(event) -> None:
+            event.app.exit(exception=NavigateBack())
+
+        return bindings
+
     def _prompt_ask(
         self,
         message: str,
@@ -152,7 +167,10 @@ class TUI:
         """Prompt for text input with Ctrl+C handling."""
         try:
             while True:
-                prompt_text = f"\n\033[96m▶\033[0m {self._plain_prompt_message(message)}"
+                prompt_text = (
+                    f"\n\033[96m▶\033[0m {self._plain_prompt_message(message)} "
+                    "\033[36m(Ctrl+Left to go back)\033[0m"
+                )
                 if default is not None:
                     prompt_text += f" [{default}]"
                 prompt_text += ": "
@@ -160,6 +178,7 @@ class TUI:
                 value = pt_prompt(
                     ANSI(prompt_text),
                     default=default or "",
+                    key_bindings=self._create_prompt_bindings(),
                 ).strip()
 
                 if value:
@@ -174,17 +193,21 @@ class TUI:
                 if default is not None:
                     return default
 
+        except NavigateBack:
+            raise
         except (KeyboardInterrupt, EOFError):
             self._handle_interrupt()
             raise
 
-    def _confirm_ask(self, *args, **kwargs) -> bool:
-        """Prompt for confirmation with Ctrl+C handling."""
-        try:
-            return Confirm.ask(*args, **kwargs)
-        except (KeyboardInterrupt, EOFError):
-            self._handle_interrupt()
-            raise
+    def _confirm_ask(self, message: str, default: bool = False) -> bool:
+        """Prompt for confirmation with Ctrl+C and back handling."""
+        default_text = "y" if default else "n"
+        response = self._prompt_ask(
+            f"{message} [y/n]",
+            choices=["y", "n", "yes", "no"],
+            default=default_text,
+        ).lower()
+        return response in {"y", "yes"}
 
     def _select_mode(self) -> ScanMode:
         """Mode selection dashboard."""
@@ -215,9 +238,9 @@ class TUI:
             )
         )
 
-        choice = Prompt.ask(
-            f"\n[bold {self.theme['prompt']}]▶[/] Select mode",
-            choices=["1", "2", "3", "4"],
+        choice = self._prompt_ask(
+            "Select mode",
+            choices=[definition.key for definition in SCAN_MODE_DEFINITIONS],
             default="1",
         )
 
@@ -227,171 +250,365 @@ class TUI:
 
         raise ValueError(f"Unknown mode selection: {choice}")
 
-    def run(self) -> Optional[Tuple[Config, ScopeManager, dict]]:
-        """Run the interactive TUI flow."""
-        try:
-            self.console.clear()
-            self._print_banner()
+    def _prompt_url_target(self, title: str, subtitle: str) -> str:
+        """Prompt for a live website/API target."""
+        self.console.clear()
+        self._print_banner()
+        self._centered_info_box(title, subtitle)
 
-            # 1. Welcome & URL Input
-            self._centered_info_box(
-                "Target Configuration",
-                "Enter the URL (e.g., https://example.com) or hostname (e.g., example.com) you have permission to audit.",
+        target = ""
+        while not target:
+            target = self._prompt_ask("Target URL or Hostname").strip()
+            if not target:
+                self.console.print(
+                    f"[{self.theme['error']}]◈ Error: target is required ◈[/]"
+                )
+                continue
+
+            validation_errors = validate_url(target, allowed_schemes=["http", "https"])
+            if validation_errors and "missing scheme" in " ".join(validation_errors).lower():
+                validation_errors = validate_host(target)
+
+            if validation_errors:
+                self.console.print(
+                    f"[{self.theme['error']}]◈ Invalid target: {', '.join(validation_errors)} ◈[/]"
+                )
+                target = ""
+
+        return target
+
+    def _prompt_project_path(self, title: str, subtitle: str) -> Path:
+        """Prompt for a project directory path."""
+        self.console.clear()
+        self._print_banner()
+        self._centered_info_box(title, subtitle)
+
+        while True:
+            raw_path = self._prompt_ask(
+                f"[bold {self.theme['prompt']}]▶[/] Project directory",
             )
+            path = Path(raw_path).expanduser()
+            errors = validate_path(path, must_exist=True, must_be_dir=True)
+            if errors:
+                self.console.print(
+                    f"[{self.theme['error']}]◈ Invalid path: {', '.join(errors)} ◈[/]"
+                )
+                continue
+            return path.resolve()
 
-            url = ""
-            while not url:
-                url = Prompt.ask(
-                    f"[bold {self.theme['prompt']}]▶[/] Target URL or Hostname"
-                ).strip()
-                if not url:
-                    self.console.print(
-                        f"[{self.theme['error']}]◈ Error: URL is required ◈[/]"
-                    )
-                    continue
+    def _select_custom_target_type(self) -> str:
+        """Prompt for the custom target family."""
+        self.console.clear()
+        self._print_banner()
 
-                # Validate the URL or hostname
-                validation_errors = validate_url(url, allowed_schemes=["http", "https"])
+        table = Table(box=box.SIMPLE, show_header=False, expand=True)
+        table.add_column("Key", style=f"bold {self.theme['primary']}", width=4)
+        table.add_column("Target", style=f"bold {self.theme['text']}", width=18)
+        table.add_column("Description", style=self.theme["dim"])
+        table.add_row("[1]", "Website/API", "Use a URL or hostname target")
+        table.add_row("[2]", "Codebase", "Use a project directory target")
+        table.add_row("[3]", "Host", "Audit the local machine")
+        table.add_row("[4]", "Containers", "Use container config files and optional local containers")
 
-                # If URL validation fails due to missing scheme, try hostname validation
-                if validation_errors and "missing scheme" in " ".join(validation_errors).lower():
-                    validation_errors = validate_host(url)
+        self.console.print(
+            Align.center(
+                Panel(
+                    table,
+                    title=f"[bold {self.theme['secondary']}]◈ CUSTOM TARGET TYPE ◈[/]",
+                    width=90,
+                    padding=(1, 2),
+                    border_style=self.theme["border"],
+                )
+            )
+        )
 
-                if validation_errors:
-                    self.console.print(
-                        f"[{self.theme['error']}]◈ Invalid target: {', '.join(validation_errors)} ◈[/]"
-                    )
-                    url = ""
-                    continue
+        return self._prompt_ask(
+            "Select target type",
+            choices=["1", "2", "3", "4"],
+            default="1",
+        )
 
-            # 2. Scan Mode
+    def _collect_scope_for_mode(self, mode: ScanMode) -> tuple[ScopeManager, str]:
+        """Collect the appropriate scope for the selected mode."""
+        if mode == ScanMode.WEBSITE_REVIEW:
+            target = self._prompt_url_target(
+                "Website Target",
+                "Enter the website URL or hostname you want to review.",
+            )
+            return ScopeManager.from_args(urls=[target]), "website"
+
+        if mode == ScanMode.API_REVIEW:
+            target = self._prompt_url_target(
+                "API Target",
+                "Enter the API base URL or endpoint you want to review.",
+            )
+            return ScopeManager.from_args(urls=[target]), "api"
+
+        if mode == ScanMode.RESILIENCE_TEST:
+            target = self._prompt_url_target(
+                "Resilience Target",
+                "Enter the URL or hostname to measure for performance and bounded load.",
+            )
+            return ScopeManager.from_args(urls=[target]), "website"
+
+        if mode == ScanMode.CODEBASE_REVIEW:
+            path = self._prompt_project_path(
+                "Codebase Target",
+                "Choose the project directory to scan for secrets, dependencies, and config risks.",
+            )
+            return ScopeManager.from_args(paths=[path]), "codebase"
+
+        if mode == ScanMode.HOST_HARDENING:
             self.console.clear()
             self._print_banner()
-            mode = self._select_mode()
-            apply_scan_mode(self.config, mode)
+            self._centered_info_box(
+                "Host Hardening Target",
+                "This mode audits the local machine for permissions, services, firewall, and hardening issues.",
+            )
+            return ScopeManager.from_args(local=True), "host"
 
-            extra_options = {"skip_checks": None, "only_checks": None}
+        if mode == ScanMode.CONTAINER_REVIEW:
+            path = self._prompt_project_path(
+                "Container Target",
+                "Choose the project directory that contains Docker or container configuration files.",
+            )
+            inspect_local = self._confirm_ask(
+                f"\n[bold {self.theme['prompt']}]▶[/] Inspect running local containers too?",
+                default=True,
+            )
+            return ScopeManager.from_args(paths=[path], local=inspect_local), "container"
 
-            if mode == ScanMode.CUSTOM:
+        if mode == ScanMode.CUSTOM:
+            target_type = self._select_custom_target_type()
+            if target_type == "1":
+                target = self._prompt_url_target(
+                    "Custom Website/API Target",
+                    "Enter the URL or hostname for your custom review.",
+                )
+                return ScopeManager.from_args(urls=[target]), "website"
+            if target_type == "2":
+                path = self._prompt_project_path(
+                    "Custom Codebase Target",
+                    "Choose the project directory for your custom review.",
+                )
+                return ScopeManager.from_args(paths=[path]), "codebase"
+            if target_type == "3":
                 self.console.clear()
                 self._print_banner()
-                self._centered_info_box("Custom Scan Configuration")
+                self._centered_info_box(
+                    "Custom Host Target",
+                    "This custom review will audit the local machine.",
+                )
+                return ScopeManager.from_args(local=True), "host"
 
-                only = Prompt.ask(
-                    f"[bold {self.theme['prompt']}]▶[/] Only run checks "
-                    "(comma-separated, empty for all)",
-                    default="",
-                ).strip()
+            path = self._prompt_project_path(
+                "Custom Container Target",
+                "Choose the project directory that contains container configuration files.",
+            )
+            inspect_local = self._confirm_ask(
+                f"\n[bold {self.theme['prompt']}]▶[/] Inspect running local containers too?",
+                default=True,
+            )
+            return ScopeManager.from_args(paths=[path], local=inspect_local), "container"
 
-                if only:
-                    extra_options["only_checks"] = only
-                else:
-                    skip = Prompt.ask(
-                        f"[bold {self.theme['prompt']}]▶[/] Skip checks "
-                        "(comma-separated)",
+        raise ValueError(f"Unsupported mode: {mode}")
+
+    def _apply_custom_defaults(self, target_family: str) -> None:
+        """Apply a safe baseline profile for custom mode based on target family."""
+        if target_family in {"website", "api"}:
+            enable_checks(self.config, ["tls", "website_risk", "performance"])
+            self.config.check.enable_banner_grabbing = True
+            self.config.output.verbose = True
+            return
+
+        if target_family == "codebase":
+            enable_checks(self.config, ["secrets", "dependencies", "webapp_config", "containers"])
+            return
+
+        if target_family == "host":
+            enable_checks(self.config, ["permissions", "services", "firewall", "hardening"])
+            return
+
+        if target_family == "container":
+            enable_checks(self.config, ["containers"])
+
+    def _enable_requested_custom_checks(self, check_ids: list[str] | None) -> None:
+        """Enable checks explicitly requested in custom mode."""
+        if not check_ids:
+            return
+        enable_checks(self.config, check_ids)
+
+    def run(self) -> Optional[Tuple[Config, ScopeManager, dict]]:
+        """Run the interactive TUI flow."""
+        step = 0
+        mode: Optional[ScanMode] = None
+        scope_manager: Optional[ScopeManager] = None
+        target_family = ""
+        extra_options = {"skip_checks": None, "only_checks": None}
+
+        while True:
+            try:
+                if step == 0:
+                    self.config = Config()
+                    self.console.clear()
+                    self._print_banner()
+                    mode = self._select_mode()
+                    apply_scan_mode(self.config, mode)
+                    step = 1
+                    continue
+
+                if step == 1:
+                    if mode is None:
+                        step = 0
+                        continue
+
+                    scope_manager, target_family = self._collect_scope_for_mode(mode)
+
+                    if not scope_manager.validate():
+                        for error in scope_manager.validation_errors:
+                            self.console.print(
+                                f"[{self.theme['error']}]◈ Scope Error: {error} ◈[/]"
+                            )
+                        continue
+
+                    extra_options = {"skip_checks": None, "only_checks": None}
+                    step = 2 if mode == ScanMode.CUSTOM else 3
+                    continue
+
+                if step == 2:
+                    self._apply_custom_defaults(target_family)
+                    self.console.clear()
+                    self._print_banner()
+                    self._centered_info_box("Custom Scan Configuration")
+
+                    only = self._prompt_ask(
+                        "Only run checks (comma-separated, empty for all)",
                         default="",
                     ).strip()
 
-                    if skip:
-                        extra_options["skip_checks"] = skip
+                    if only:
+                        extra_options["only_checks"] = only
+                        self._enable_requested_custom_checks(
+                            [item.strip() for item in only.split(",") if item.strip()]
+                        )
+                    else:
+                        skip = self._prompt_ask(
+                            "Skip checks (comma-separated)",
+                            default="",
+                        ).strip()
 
-            # 3. Reports
-            self.console.clear()
-            self._print_banner()
-            self._centered_info_box("Reporting Options")
+                        if skip:
+                            extra_options["skip_checks"] = skip
 
-            save_report = Confirm.ask(
-                f"\n[bold {self.theme['prompt']}]▶[/] Save findings to report files?",
-                default=True,
-            )
+                    step = 3
+                    continue
 
-            if save_report:
-                timestamp = time.strftime("%Y%m%d_%H%M%S")
-                self.config.output.json_report_path = Path(
-                    f"audit_report_{timestamp}.json"
-                )
-                self.config.output.html_report_path = Path(
-                    f"audit_report_{timestamp}.html"
-                )
+                if step == 3:
+                    self.console.clear()
+                    self._print_banner()
+                    self._centered_info_box("Reporting Options")
 
-                from .utils import get_downloads_path
-                downloads = get_downloads_path()
-                self.config.output.pdf_report_path = (
-                    downloads / f"audit_report_{timestamp}.pdf"
-                )
+                    save_report = self._confirm_ask(
+                        "Save findings to report files?",
+                        default=True,
+                    )
 
-                self.console.print(
-                    f"\n[{self.theme['dim']}]◈ Reports saved as: audit_report_{timestamp}.* ◈[/]"
-                )
+                    self.config.output.json_report_path = None
+                    self.config.output.html_report_path = None
+                    self.config.output.pdf_report_path = None
 
-            # 4. Authorization
-            from .cli import LEGAL_WARNING
+                    if save_report:
+                        timestamp = time.strftime("%Y%m%d_%H%M%S")
+                        self.config.output.json_report_path = Path(
+                            f"audit_report_{timestamp}.json"
+                        )
+                        self.config.output.html_report_path = Path(
+                            f"audit_report_{timestamp}.html"
+                        )
 
-            self.console.clear()
-            self.console.print(self._get_header())
-            self.console.print()
+                        from .utils import get_downloads_path
+                        downloads = get_downloads_path()
+                        self.config.output.pdf_report_path = (
+                            downloads / f"audit_report_{timestamp}.pdf"
+                        )
 
-            warning_panel = Panel(
-                Align.center(
-                    Group(
-                        Text(
-                            "◈◈◈  LEGAL DISCLAIMER  ◈◈◈",
-                            style=f"bold {self.theme['error']} underline",
-                            justify="center",
+                        self.console.print(
+                            f"\n[{self.theme['dim']}]◈ Reports saved as: audit_report_{timestamp}.* ◈[/]"
+                        )
+
+                    step = 4
+                    continue
+
+                if step == 4:
+                    from .cli import LEGAL_WARNING
+
+                    self.console.clear()
+                    self.console.print(self._get_header())
+                    self.console.print()
+
+                    warning_panel = Panel(
+                        Align.center(
+                            Group(
+                                Text(
+                                    "◈◈◈  LEGAL DISCLAIMER  ◈◈◈",
+                                    style=f"bold {self.theme['error']} underline",
+                                    justify="center",
+                                ),
+                                Text("\n"),
+                                Text.from_markup(LEGAL_WARNING.strip()),
+                            )
                         ),
-                        Text("\n"),
-                        Text.from_markup(LEGAL_WARNING.strip()),
+                        border_style=self.theme["error"],
+                        padding=(2, 4),
+                        box=box.HEAVY,
+                        width=96,
                     )
-                ),
-                border_style=self.theme["error"],
-                padding=(2, 4),
-                box=box.HEAVY,
-                width=96,
-            )
 
-            self.console.print(Align.center(warning_panel))
-            self.console.print()
+                    self.console.print(Align.center(warning_panel))
+                    self.console.print()
 
-            self.console.print(
-                Align.center(
-                    f"[bold {self.theme['text']}]◈ Do you have explicit authorization to audit this target? ◈[/]"
-                )
-            )
-
-            auth = Confirm.ask(
-                f"[bold {self.theme['prompt']}]▶[/]",
-                default=False,
-                show_default=True,
-            )
-
-            if not auth:
-                self.console.print(
-                    f"\n[bold {self.theme['error']}]◈ Authorization required. Exiting. ◈[/]"
-                )
-                return None
-
-            self.config.authorization_confirmed = True
-
-            scope_manager = ScopeManager.from_args(urls=[url])
-            if not scope_manager.validate():
-                for error in scope_manager.validation_errors:
                     self.console.print(
-                        f"[{self.theme['error']}]◈ Scope Error: {error} ◈[/]"
+                        Align.center(
+                            f"[bold {self.theme['text']}]◈ Do you have explicit authorization to audit this target? ◈[/]"
+                        )
                     )
+
+                    auth = self._confirm_ask(
+                        "Do you have explicit authorization to audit this target?",
+                        default=False,
+                    )
+
+                    if not auth:
+                        self.console.print(
+                            f"\n[bold {self.theme['error']}]◈ Authorization required. Exiting. ◈[/]"
+                        )
+                        return None
+
+                    self.config.authorization_confirmed = True
+
+                    self.console.print(
+                        f"\n[bold {self.theme['success']}]◈ Setup complete. Initializing CACHE WRAITH... ◈[/]\n"
+                    )
+                    time.sleep(1)
+                    return self.config, scope_manager, extra_options
+
+            except NavigateBack:
+                if step == 0:
+                    continue
+                if step == 1:
+                    step = 0
+                elif step == 2:
+                    step = 1
+                elif step == 3:
+                    step = 2 if mode == ScanMode.CUSTOM else 1
+                elif step == 4:
+                    step = 3
+                continue
+            except (KeyboardInterrupt, EOFError):
                 return None
-
-        except (KeyboardInterrupt, EOFError):
-            return None
-        except Exception as e:
-            self.console.print(f"[{self.theme['error']}]◈ Error: {e} ◈[/]")
-            return None
-
-        self.console.print(
-            f"\n[bold {self.theme['success']}]◈ Setup complete. Initializing CACHE WRAITH... ◈[/]\n"
-        )
-        time.sleep(1)
-
-        return self.config, scope_manager, extra_options
+            except Exception as e:
+                self.console.print(f"[{self.theme['error']}]◈ Error: {e} ◈[/]")
+                return None
 
     def run_with_progress(self, scan_func, *args, **kwargs) -> Any:
         """Run a task with a progress dashboard."""
