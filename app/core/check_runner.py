@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from typing import Any, Callable
 
 from ..checks import BaseCheck
 from ..config import Config
@@ -25,6 +26,8 @@ CHECK_ENABLEMENT: dict[str, str] = {
     "vulnerability": "vulnerability_scan",
     "website_risk": "website_risk_check",
 }
+
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 
 def is_check_enabled(check_class: type[BaseCheck], config: Config) -> bool:
@@ -64,6 +67,7 @@ def run_checks(
     logger: logging.Logger,
     skip_checks: list[str] | None = None,
     only_checks: list[str] | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> AuditSummary:
     """Run all selected checks and aggregate their findings."""
     summary = AuditSummary(
@@ -76,7 +80,22 @@ def run_checks(
         ),
     )
 
-    for check_class in select_checks(config, skip_checks=skip_checks, only_checks=only_checks):
+    selected_checks = select_checks(config, skip_checks=skip_checks, only_checks=only_checks)
+
+    if progress_callback:
+        progress_callback({"event": "start", "total": len(selected_checks)})
+
+    for index, check_class in enumerate(selected_checks, start=1):
+        if progress_callback:
+            progress_callback(
+                {
+                    "event": "check_start",
+                    "current": index,
+                    "total": len(selected_checks),
+                    "check_id": check_class.check_id,
+                    "check_name": check_class.check_name,
+                }
+            )
         try:
             logger.debug("Running check: %s", check_class.check_name)
 
@@ -95,12 +114,53 @@ def run_checks(
                 check_class.check_id,
                 result.findings_count,
             )
+            if progress_callback:
+                progress_callback(
+                    {
+                        "event": "check_end",
+                        "current": index,
+                        "total": len(selected_checks),
+                        "check_id": check_class.check_id,
+                        "check_name": check_class.check_name,
+                        "findings_count": result.findings_count,
+                        "findings_count_total": len(summary.findings),
+                        "errors_count": len(result.errors),
+                        "errors_count_total": len(summary.errors),
+                        "status": "ok",
+                    }
+                )
         except Exception as exc:
             error_message = f"Check {check_class.check_id} failed: {exc}"
             summary.errors.append(error_message)
             logger.exception(error_message)
+            if progress_callback:
+                progress_callback(
+                    {
+                        "event": "check_end",
+                        "current": index,
+                        "total": len(selected_checks),
+                        "check_id": check_class.check_id,
+                        "check_name": check_class.check_name,
+                        "findings_count": 0,
+                        "findings_count_total": len(summary.findings),
+                        "errors_count": 1,
+                        "errors_count_total": len(summary.errors),
+                        "status": "failed",
+                    }
+                )
 
     summary.end_time = datetime.utcnow()
+
+    if progress_callback:
+        progress_callback(
+            {
+                "event": "complete",
+                "total": len(selected_checks),
+                "findings_count": len(summary.findings),
+                "errors_count": len(summary.errors),
+            }
+        )
+
     return summary
 
 
