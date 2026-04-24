@@ -15,6 +15,7 @@ from ..checks import (
     ServicesCheck,
     TLSCheck,
     VulnerabilityCheck,
+    WebsiteRiskCheck,
     WebAppConfigCheck,
 )
 from ..config import Config
@@ -32,6 +33,7 @@ BASE_CHECKS: tuple[type[BaseCheck], ...] = (
 )
 
 ACTIVE_CHECKS: tuple[type[BaseCheck], ...] = (
+    WebsiteRiskCheck,
     PerformanceCheck,
     LoadTestCheck,
     VulnerabilityCheck,
@@ -42,6 +44,8 @@ def get_available_checks(config: Config) -> list[type[BaseCheck]]:
     """Return the checks available for the provided configuration."""
     checks = list(BASE_CHECKS)
 
+    if config.check.website_risk_check:
+        checks.append(WebsiteRiskCheck)
     if config.check.performance_test:
         checks.append(PerformanceCheck)
     if config.check.load_test:

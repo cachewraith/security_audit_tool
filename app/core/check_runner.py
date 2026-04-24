@@ -11,10 +11,19 @@ from ..models import AuditSummary, Scope, SeverityLevel
 from .check_registry import get_available_checks
 
 CHECK_ENABLEMENT: dict[str, str] = {
+    "permissions": "permissions_check",
+    "services": "services_check",
+    "firewall": "firewall_check",
+    "hardening": "hardening_check",
+    "secrets": "secrets_check",
+    "dependencies": "dependencies_check",
     "tls": "tls_check",
+    "containers": "containers_check",
+    "webapp_config": "webapp_config_check",
     "performance": "performance_test",
     "load_test": "load_test",
     "vulnerability": "vulnerability_scan",
+    "website_risk": "website_risk_check",
 }
 
 
@@ -59,7 +68,12 @@ def run_checks(
     """Run all selected checks and aggregate their findings."""
     summary = AuditSummary(
         start_time=datetime.utcnow(),
-        target_count=len(scope.project_paths) + (1 if scope.local_endpoint else 0) + len(scope.allowed_hosts),
+        target_count=(
+            len(scope.project_paths)
+            + (1 if scope.local_endpoint else 0)
+            + len(scope.allowed_hosts)
+            + len(scope.allowed_urls)
+        ),
     )
 
     for check_class in select_checks(config, skip_checks=skip_checks, only_checks=only_checks):

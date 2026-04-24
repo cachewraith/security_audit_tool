@@ -46,8 +46,11 @@ class ConfidenceLevel(Enum):
 class ScanMode(Enum):
     """High-level defensive scan mode."""
 
-    PASSIVE_AUDIT = "passive_audit"
-    ACTIVE_VALIDATION = "active_validation"
+    WEBSITE_REVIEW = "website_review"
+    API_REVIEW = "api_review"
+    CODEBASE_REVIEW = "codebase_review"
+    HOST_HARDENING = "host_hardening"
+    CONTAINER_REVIEW = "container_review"
     RESILIENCE_TEST = "resilience_test"
     CUSTOM = "custom"
 
@@ -188,6 +191,7 @@ class Scope:
         local_endpoint: Whether to audit the local system
         project_paths: List of project directories to audit
         allowed_hosts: List of allowed hostnames/IPs for network checks
+        allowed_urls: List of explicitly approved URLs for HTTP-based checks
         container_images: List of container images to check
         container_ids: List of running container IDs to check
         exclude_paths: Paths to exclude from filesystem checks
@@ -196,6 +200,7 @@ class Scope:
     local_endpoint: bool = False
     project_paths: list[Path] = field(default_factory=list)
     allowed_hosts: list[str] = field(default_factory=list)
+    allowed_urls: list[str] = field(default_factory=list)
     container_images: list[str] = field(default_factory=list)
     container_ids: list[str] = field(default_factory=list)
     exclude_paths: list[str] = field(default_factory=list)
@@ -207,6 +212,7 @@ class Scope:
             self.local_endpoint,
             self.project_paths,
             self.allowed_hosts,
+            self.allowed_urls,
             self.container_images,
             self.container_ids,
         ])
@@ -228,6 +234,10 @@ class Scope:
         for host in self.allowed_hosts:
             if not host or len(host) > 253:
                 errors.append(f"Invalid host in scope: {host}")
+
+        for url in self.allowed_urls:
+            if not url:
+                errors.append("Invalid URL in scope: empty value")
         
         return errors
     
@@ -237,6 +247,7 @@ class Scope:
             "local_endpoint": self.local_endpoint,
             "project_paths": [str(p) for p in self.project_paths],
             "allowed_hosts": self.allowed_hosts,
+            "allowed_urls": self.allowed_urls,
             "container_images": self.container_images,
             "container_ids": self.container_ids,
             "exclude_paths": self.exclude_paths,
@@ -250,6 +261,7 @@ class Scope:
             local_endpoint=data.get("local_endpoint", False),
             project_paths=[Path(p) for p in data.get("project_paths", [])],
             allowed_hosts=data.get("allowed_hosts", []),
+            allowed_urls=data.get("allowed_urls", []),
             container_images=data.get("container_images", []),
             container_ids=data.get("container_ids", []),
             exclude_paths=data.get("exclude_paths", []),

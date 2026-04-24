@@ -9,6 +9,7 @@ from .secrets_check import SecretsCheck
 from .dependencies_check import DependenciesCheck
 from .tls_check import TLSCheck
 from .containers_check import ContainersCheck
+from .website_risk_check import WebsiteRiskCheck
 from .webapp_config_check import WebAppConfigCheck
 from .performance_check import PerformanceCheck
 from .load_test_check import LoadTestCheck
@@ -25,6 +26,7 @@ __all__ = [
     "DependenciesCheck",
     "TLSCheck",
     "ContainersCheck",
+    "WebsiteRiskCheck",
     "WebAppConfigCheck",
     "PerformanceCheck",
     "LoadTestCheck",

@@ -85,6 +85,11 @@ For more information, see README.md
         help="Enable service banner grabbing (disabled by default)",
     )
     check_group.add_argument(
+        "--enable-website-risk-checks",
+        action="store_true",
+        help="Enable live website header, cookie, redirect, and form posture checks",
+    )
+    check_group.add_argument(
         "--enable-performance-test",
         action="store_true",
         help="Enable performance testing (response time measurement)",
@@ -247,6 +252,7 @@ def list_available_checks() -> None:
         ("tls", "TLS/SSL certificate inspection (opt-in)"),
         ("containers", "Container security configuration"),
         ("webapp_config", "Web application configuration checks"),
+        ("website_risk", "Live website header, cookie, redirect, and form checks (opt-in)"),
         ("performance", "Performance testing - response time measurement (opt-in)"),
         ("load_test", "Load testing - DDoS simulation (opt-in, intensive)"),
         ("vulnerability", "Vulnerability scanning - SQLi, XSS tests (opt-in)"),
@@ -257,8 +263,10 @@ def list_available_checks() -> None:
     print("  Read-only checks (safe, enabled by default):")
     for check_id, description in checks[:9]:
         print(f"    {check_id:20} - {description}")
-    print("\n  Active tests (send traffic, requires --pentest-mode):")
-    for check_id, description in checks[9:]:
+    print("\n  Live website checks (send requests, opt-in):")
+    print(f"    {checks[9][0]:20} - {checks[9][1]}")
+    print("\n  Active tests (send traffic, requires explicit opt-in):")
+    for check_id, description in checks[10:]:
         print(f"    {check_id:20} - {description}")
     print()
 
@@ -346,6 +354,7 @@ def apply_full_scan_options(args: argparse.Namespace) -> None:
         # Enable all check options
         args.enable_tls_checks = True
         args.enable_banner_grabbing = True
+        args.enable_website_risk_checks = True
         # Also enable pentest features for comprehensive scan
         args.enable_performance_test = True
         args.enable_vulnerability_scan = True
@@ -410,6 +419,7 @@ def build_config_from_args(args: argparse.Namespace) -> Config:
     # Check settings
     config.check.tls_check = args.enable_tls_checks
     config.check.enable_banner_grabbing = args.enable_banner_grabbing
+    config.check.website_risk_check = args.enable_website_risk_checks
     config.check.performance_test = args.enable_performance_test
     config.check.load_test = args.enable_load_test
     config.check.vulnerability_scan = args.enable_vulnerability_scan

@@ -127,6 +127,22 @@ class TestScopeManagerCreation:
         assert "example.com" in manager.scope.allowed_hosts
         assert "# Comment" not in manager.scope.allowed_hosts
 
+    def test_from_args_with_urls_preserves_exact_urls(self) -> None:
+        """Explicit URLs should stay in scope for HTTP-based checks."""
+        manager = ScopeManager.from_args(
+            local=False,
+            paths=None,
+            hosts=None,
+            urls=["https://example.com/login", "https://api.example.com/v1/health"],
+        )
+
+        assert manager.scope.allowed_urls == [
+            "https://example.com/login",
+            "https://api.example.com/v1/health",
+        ]
+        assert "example.com" in manager.scope.allowed_hosts
+        assert "api.example.com" in manager.scope.allowed_hosts
+
 
 class TestExampleScopeYAML:
     """Tests for example scope YAML generation."""

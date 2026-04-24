@@ -131,6 +131,13 @@ class ScopeManager:
                 lines.append(f"    - {h}")
             if len(self.scope.allowed_hosts) > 5:
                 lines.append(f"    ... and {len(self.scope.allowed_hosts) - 5} more")
+
+        if self.scope.allowed_urls:
+            lines.append(f"  - Allowed URLs ({len(self.scope.allowed_urls)}):")
+            for url in self.scope.allowed_urls[:5]:
+                lines.append(f"    - {url}")
+            if len(self.scope.allowed_urls) > 5:
+                lines.append(f"    ... and {len(self.scope.allowed_urls) - 5} more")
         
         if self.scope.container_ids:
             lines.append(f"  - Container IDs ({len(self.scope.container_ids)})")
@@ -158,6 +165,7 @@ class ScopeManager:
             local_endpoint=data.get("local_endpoint", False),
             project_paths=project_paths,
             allowed_hosts=data.get("allowed_hosts", []),
+            allowed_urls=data.get("allowed_urls", []),
             container_images=data.get("container_images", []),
             container_ids=data.get("container_ids", []),
             exclude_paths=data.get("exclude_paths", []),
@@ -182,6 +190,7 @@ class ScopeManager:
                 project_paths.append(p.expanduser().resolve())
 
         allowed_hosts = list(hosts) if hosts else []
+        allowed_urls: list[str] = []
 
         if host_file and host_file.exists():
             with open(host_file, 'r') as f:
@@ -193,6 +202,8 @@ class ScopeManager:
         # Extract hostnames from URLs
         if urls:
             for url in urls:
+                if url not in allowed_urls:
+                    allowed_urls.append(url)
                 parsed = urlparse(url)
                 hostname = parsed.hostname or url
                 # Remove port if present in hostname
@@ -205,6 +216,7 @@ class ScopeManager:
             local_endpoint=local,
             project_paths=project_paths,
             allowed_hosts=allowed_hosts,
+            allowed_urls=allowed_urls,
         )
 
         return cls(scope)
@@ -231,6 +243,11 @@ allowed_hosts:
   - 192.168.1.0/24
   - *.example.com
   - 10.0.0.5
+
+# Explicit URLs for HTTP-based checks
+allowed_urls:
+  - https://example.com/login
+  - https://api.example.com/v1/health
 
 # Container images to check
 container_images:

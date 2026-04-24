@@ -3,7 +3,6 @@
 import time
 import statistics
 from typing import Optional
-from urllib.parse import urlparse
 
 import urllib.request
 import urllib.error
@@ -25,18 +24,16 @@ class PerformanceCheck(BaseCheck):
         """Run performance tests."""
         result = self._create_result()
 
-        # Get target hosts from scope
-        hosts = self.scope.allowed_hosts
+        targets = self.scope.allowed_urls or self.scope.allowed_hosts
 
-        for host in hosts:
-            self._test_host_performance(host, result)
+        for target in targets:
+            self._test_host_performance(target, result)
 
         return self._finish_result(result)
 
-    def _test_host_performance(self, host: str, result: CheckResult) -> None:
+    def _test_host_performance(self, target: str, result: CheckResult) -> None:
         """Test performance for a single host."""
-        # Build URL
-        url = f"https://{host}" if not host.startswith(('http://', 'https://')) else host
+        url = f"https://{target}" if not target.startswith(('http://', 'https://')) else target
 
         # Test response time
         response_times = []
@@ -80,9 +77,9 @@ class PerformanceCheck(BaseCheck):
                 severity = SeverityLevel.LOW
 
             finding = self._create_finding(
-                title=f"Performance Test: {host}",
+                title=f"Performance Test: {target}",
                 severity=severity,
-                target=host,
+                target=target,
                 evidence=f"Avg: {avg_time:.2f}s, Min: {min_time:.2f}s, Max: {max_time:.2f}s, Requests: {len(response_times)}",
                 remediation="Optimize server response time. Consider CDN, caching, or server upgrades." if severity != SeverityLevel.INFO else "Performance is acceptable.",
                 confidence=ConfidenceLevel.HIGH,
@@ -91,9 +88,9 @@ class PerformanceCheck(BaseCheck):
 
         if errors:
             finding = self._create_finding(
-                title=f"Connection Errors: {host}",
+                title=f"Connection Errors: {target}",
                 severity=SeverityLevel.MEDIUM,
-                target=host,
+                target=target,
                 evidence=f"Errors: {len(errors)}, Examples: {errors[:2]}",
                 remediation="Check server availability and network connectivity.",
                 confidence=ConfidenceLevel.MEDIUM,
