@@ -56,8 +56,17 @@ class CheckConfig:
 
     # Active tests - these send traffic to targets (pentest mode)
     performance_test: bool = False  # Response time testing
-    load_test: bool = False  # DDoS/load testing simulation
+    load_test: bool = False  # Controlled load testing
     vulnerability_scan: bool = False  # SQLi, XSS, injection tests
+
+    # Active-check execution controls
+    active_check_min_duration_seconds: int = 30
+    multi_stage_active_checks: bool = True
+    randomize_safe_requests: bool = True
+    performance_samples_per_stage: int = 4
+    load_test_concurrent: int = 10
+    load_test_requests_per_user: int = 4
+    load_test_duration_seconds: int = 30
 
     # Check-specific options
     enable_banner_grabbing: bool = False
@@ -167,6 +176,16 @@ class Config:
                 containers_check=ch.get("containers_check", True),
                 webapp_config_check=ch.get("webapp_config_check", True),
                 website_risk_check=ch.get("website_risk_check", False),
+                performance_test=ch.get("performance_test", False),
+                load_test=ch.get("load_test", False),
+                vulnerability_scan=ch.get("vulnerability_scan", False),
+                active_check_min_duration_seconds=ch.get("active_check_min_duration_seconds", 30),
+                multi_stage_active_checks=ch.get("multi_stage_active_checks", True),
+                randomize_safe_requests=ch.get("randomize_safe_requests", True),
+                performance_samples_per_stage=ch.get("performance_samples_per_stage", 4),
+                load_test_concurrent=ch.get("load_test_concurrent", 10),
+                load_test_requests_per_user=ch.get("load_test_requests_per_user", 4),
+                load_test_duration_seconds=ch.get("load_test_duration_seconds", 30),
                 enable_banner_grabbing=ch.get("enable_banner_grabbing", False),
                 check_sudo_config=ch.get("check_sudo_config", True),
                 check_ssh_config=ch.get("check_ssh_config", True),
@@ -230,6 +249,16 @@ class Config:
                 "containers_check": self.check.containers_check,
                 "webapp_config_check": self.check.webapp_config_check,
                 "website_risk_check": self.check.website_risk_check,
+                "performance_test": self.check.performance_test,
+                "load_test": self.check.load_test,
+                "vulnerability_scan": self.check.vulnerability_scan,
+                "active_check_min_duration_seconds": self.check.active_check_min_duration_seconds,
+                "multi_stage_active_checks": self.check.multi_stage_active_checks,
+                "randomize_safe_requests": self.check.randomize_safe_requests,
+                "performance_samples_per_stage": self.check.performance_samples_per_stage,
+                "load_test_concurrent": self.check.load_test_concurrent,
+                "load_test_requests_per_user": self.check.load_test_requests_per_user,
+                "load_test_duration_seconds": self.check.load_test_duration_seconds,
                 "enable_banner_grabbing": self.check.enable_banner_grabbing,
                 "check_sudo_config": self.check.check_sudo_config,
                 "check_ssh_config": self.check.check_ssh_config,

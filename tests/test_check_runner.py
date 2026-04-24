@@ -70,6 +70,11 @@ class TestCheckRunnerProgress:
 
         assert len(summary.findings) == 1
         assert len(summary.errors) == 1
+        assert len(summary.check_results) == 2
+        assert summary.check_results[0].check_id == "successful"
+        assert summary.check_results[0].findings_count == 1
+        assert summary.check_results[1].check_id == "failing"
+        assert summary.check_results[1].passed is False
 
         event_names = [event["event"] for event in events]
         assert event_names == [

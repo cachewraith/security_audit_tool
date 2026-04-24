@@ -229,6 +229,42 @@ class ContainersCheck(BaseCheck):
                             references=["https://docs.docker.com/compose/compose-file/compose-file-v3/"],
                         )
                         result.findings.append(finding)
+
+                    if "read_only: true" not in content_lower:
+                        finding = self._create_finding(
+                            title="Docker Compose services do not enforce read-only root filesystems",
+                            severity=SeverityLevel.LOW,
+                            target=str(compose_file),
+                            evidence="No read_only: true setting found in the compose definition",
+                            remediation="Enable read_only: true for services that do not need to write to the container filesystem.",
+                            confidence=ConfidenceLevel.MEDIUM,
+                            references=["https://docs.docker.com/engine/security/"],
+                        )
+                        result.findings.append(finding)
+
+                    if "no-new-privileges:true" not in content_lower and "no-new-privileges=true" not in content_lower:
+                        finding = self._create_finding(
+                            title="Docker Compose is missing no-new-privileges hardening",
+                            severity=SeverityLevel.MEDIUM,
+                            target=str(compose_file),
+                            evidence="No security_opt entry enabling no-new-privileges was found",
+                            remediation="Add security_opt: [\"no-new-privileges:true\"] to services where supported.",
+                            confidence=ConfidenceLevel.MEDIUM,
+                            references=["https://docs.docker.com/engine/reference/run/#security-configuration"],
+                        )
+                        result.findings.append(finding)
+
+                    if "cap_add:" in content_lower and "cap_drop:" not in content_lower:
+                        finding = self._create_finding(
+                            title="Docker Compose adds capabilities without an explicit drop policy",
+                            severity=SeverityLevel.MEDIUM,
+                            target=str(compose_file),
+                            evidence="Capability additions were found without a matching cap_drop baseline",
+                            remediation="Prefer cap_drop: [\"ALL\"] and add back only the minimal capabilities required.",
+                            confidence=ConfidenceLevel.MEDIUM,
+                            references=["https://docs.docker.com/engine/reference/run/#runtime-privilege-and-linux-capabilities"],
+                        )
+                        result.findings.append(finding)
                     
                     # Check for bind mounts to sensitive paths
                     sensitive_mounts = ["/etc", "/root", "/var/run/docker.sock", "/proc", "/sys"]
@@ -244,6 +280,18 @@ class ContainersCheck(BaseCheck):
                                 references=["https://docs.docker.com/storage/bind-mounts/"],
                             )
                             result.findings.append(finding)
+
+                    if ":latest" in content_lower:
+                        finding = self._create_finding(
+                            title="Docker Compose references mutable latest-tag images",
+                            severity=SeverityLevel.LOW,
+                            target=str(compose_file),
+                            evidence="Compose file contains one or more image references using the latest tag",
+                            remediation="Pin images to immutable versioned tags or digests to improve traceability and rollback safety.",
+                            confidence=ConfidenceLevel.HIGH,
+                            references=["https://docs.docker.com/develop/dev-best-practices/#pin-base-image-versions"],
+                        )
+                        result.findings.append(finding)
                             
                 except Exception as e:
                     self._log_error(f"Error reading docker-compose file {compose_file}", e)
@@ -341,6 +389,70 @@ class ContainersCheck(BaseCheck):
                                 references=["https://docs.docker.com/engine/reference/run/#runtime-privilege-and-linux-capabilities"],
                             )
                             result.findings.append(finding)
+
+                    readonly_rootfs = host_config.get("ReadonlyRootfs", False)
+                    if not readonly_rootfs:
+                        finding = self._create_finding(
+                            title="Running container has a writable root filesystem",
+                            severity=SeverityLevel.LOW,
+                            target=f"container:{cid[:12]}",
+                            evidence="ReadonlyRootfs is disabled for the running container",
+                            remediation="Enable a read-only root filesystem and mount only the specific writable paths required.",
+                            confidence=ConfidenceLevel.HIGH,
+                            references=["https://docs.docker.com/engine/security/"],
+                        )
+                        result.findings.append(finding)
+
+                    security_opt = host_config.get("SecurityOpt", []) or []
+                    if not any("no-new-privileges" in opt for opt in security_opt):
+                        finding = self._create_finding(
+                            title="Running container is missing no-new-privileges",
+                            severity=SeverityLevel.MEDIUM,
+                            target=f"container:{cid[:12]}",
+                            evidence="Container runtime options do not include no-new-privileges",
+                            remediation="Run the container with --security-opt no-new-privileges:true.",
+                            confidence=ConfidenceLevel.HIGH,
+                            references=["https://docs.docker.com/engine/reference/run/#security-configuration"],
+                        )
+                        result.findings.append(finding)
+
+                    mounts = container_info.get("Mounts", []) or []
+                    if any(mount.get("Source") == "/var/run/docker.sock" for mount in mounts):
+                        finding = self._create_finding(
+                            title="Running container mounts the Docker socket",
+                            severity=SeverityLevel.CRITICAL,
+                            target=f"container:{cid[:12]}",
+                            evidence="Container bind-mounts /var/run/docker.sock from the host",
+                            remediation="Remove Docker socket access or isolate it behind a narrowly scoped broker.",
+                            confidence=ConfidenceLevel.CERTAIN,
+                            references=["https://docs.docker.com/engine/security/protect-access/"],
+                        )
+                        result.findings.append(finding)
+
+                    if host_config.get("PidMode") == "host":
+                        finding = self._create_finding(
+                            title="Running container shares the host PID namespace",
+                            severity=SeverityLevel.MEDIUM,
+                            target=f"container:{cid[:12]}",
+                            evidence="PidMode is set to host",
+                            remediation="Avoid host PID sharing unless the workload explicitly requires it.",
+                            confidence=ConfidenceLevel.CERTAIN,
+                            references=["https://docs.docker.com/engine/reference/run/#pid-settings---pid"],
+                        )
+                        result.findings.append(finding)
+
+                    pids_limit = host_config.get("PidsLimit")
+                    if pids_limit in (None, 0):
+                        finding = self._create_finding(
+                            title="Running container does not define a PID limit",
+                            severity=SeverityLevel.LOW,
+                            target=f"container:{cid[:12]}",
+                            evidence="PidsLimit is not configured for the running container",
+                            remediation="Set a sensible --pids-limit value to reduce process-fork exhaustion risk.",
+                            confidence=ConfidenceLevel.MEDIUM,
+                            references=["https://docs.docker.com/engine/reference/run/#runtime-constraints-on-resources"],
+                        )
+                        result.findings.append(finding)
                             
                 except Exception as e:
                     self._log_error(f"Error inspecting container {cid}", e)
@@ -351,9 +463,21 @@ class ContainersCheck(BaseCheck):
     def _check_container_images(self, result: CheckResult) -> None:
         """Check specified container images."""
         for image in self.scope.container_images:
-            # Note: In production, this would check for known CVEs in the image
-            # For now, just document that the image is in scope
-            pass
+            if ":" not in image or image.endswith(":latest"):
+                result.findings.append(
+                    self._create_finding(
+                        title="Container image reference is not pinned to an immutable version",
+                        severity=SeverityLevel.LOW,
+                        target=image,
+                        evidence="Image reference uses an implicit or latest tag",
+                        remediation="Pin the image to a versioned tag or digest and review it against an image vulnerability scanner.",
+                        confidence=ConfidenceLevel.HIGH,
+                        references=[
+                            "https://docs.docker.com/develop/dev-best-practices/#pin-base-image-versions",
+                            "https://docs.docker.com/scout/",
+                        ],
+                    )
+                )
     
     @classmethod
     def get_description(cls) -> str:
@@ -361,8 +485,9 @@ class ContainersCheck(BaseCheck):
         Checks container security configuration:
         - Dockerfile best practices (non-root user, no secrets)
         - Docker Compose security (no privileged mode, no host namespace sharing)
-        - Running container security settings
-        - Dangerous capabilities
+        - Running container security settings and runtime hardening
+        - Dangerous capabilities, writable root filesystems, and Docker socket access
+        - Image pinning hygiene for container references
         """
     
     @classmethod

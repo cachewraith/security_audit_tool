@@ -43,36 +43,42 @@ SCAN_MODE_DEFINITIONS: tuple[ScanModeDefinition, ...] = (
     ),
     ScanModeDefinition(
         key="2",
+        mode=ScanMode.OWASP_TOP_10_REVIEW,
+        label="OWASP Top 10 Review",
+        description="Broad web risk review mapped to OWASP Top 10 with active probes",
+    ),
+    ScanModeDefinition(
+        key="3",
         mode=ScanMode.API_REVIEW,
         label="API Review",
         description="Live API-oriented HTTP posture, TLS, and latency review",
     ),
     ScanModeDefinition(
-        key="3",
+        key="4",
         mode=ScanMode.CODEBASE_REVIEW,
         label="Codebase Review",
         description="Secrets, dependencies, web config, and container file review",
     ),
     ScanModeDefinition(
-        key="4",
+        key="5",
         mode=ScanMode.HOST_HARDENING,
         label="Host Hardening",
         description="Local permissions, services, firewall, and hardening checks",
     ),
     ScanModeDefinition(
-        key="5",
+        key="6",
         mode=ScanMode.CONTAINER_REVIEW,
         label="Container Review",
         description="Dockerfile, Compose, image, and running-container review",
     ),
     ScanModeDefinition(
-        key="6",
+        key="7",
         mode=ScanMode.RESILIENCE_TEST,
         label="Resilience Test",
         description="Performance and bounded load testing only",
     ),
     ScanModeDefinition(
-        key="7",
+        key="8",
         mode=ScanMode.CUSTOM,
         label="Custom",
         description="Choose a target type and tailor checks manually",
@@ -114,6 +120,12 @@ def apply_scan_mode(config: Config, mode: ScanMode) -> None:
 
     if mode == ScanMode.WEBSITE_REVIEW:
         enable_checks(config, ["tls", "website_risk", "performance"])
+        config.check.enable_banner_grabbing = True
+        config.output.verbose = True
+        return
+
+    if mode == ScanMode.OWASP_TOP_10_REVIEW:
+        enable_checks(config, ["tls", "website_risk", "vulnerability", "performance"])
         config.check.enable_banner_grabbing = True
         config.output.verbose = True
         return

@@ -47,6 +47,7 @@ class ScanMode(Enum):
     """High-level defensive scan mode."""
 
     WEBSITE_REVIEW = "website_review"
+    OWASP_TOP_10_REVIEW = "owasp_top_10_review"
     API_REVIEW = "api_review"
     CODEBASE_REVIEW = "codebase_review"
     HOST_HARDENING = "host_hardening"
@@ -138,6 +139,33 @@ class Finding:
 
 
 @dataclass
+class CheckExecution:
+    """Summary of a single executed check."""
+
+    check_id: str
+    check_name: str
+    category: str
+    passed: bool
+    findings_count: int = 0
+    errors: list[str] = field(default_factory=list)
+    duration_seconds: float = 0.0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert check execution summary to a dictionary."""
+        return {
+            "check_id": self.check_id,
+            "check_name": self.check_name,
+            "category": self.category,
+            "passed": self.passed,
+            "findings_count": self.findings_count,
+            "errors": self.errors,
+            "duration_seconds": self.duration_seconds,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
 class AuditSummary:
     """Summary of an audit run."""
     start_time: datetime
@@ -145,6 +173,7 @@ class AuditSummary:
     target_count: int = 0
     findings: list[Finding] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    check_results: list[CheckExecution] = field(default_factory=list)
     
     @property
     def duration_seconds(self) -> float:
@@ -180,6 +209,7 @@ class AuditSummary:
             "category_counts": {k.value: v for k, v in self.count_by_category().items()},
             "findings": [f.to_dict() for f in self.findings],
             "errors": self.errors,
+            "check_results": [check.to_dict() for check in self.check_results],
         }
 
 

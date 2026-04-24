@@ -15,7 +15,7 @@ class ComplianceFramework(Enum):
     ISO27001 = "iso27001"
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class CISControl:
     """CIS Control reference."""
     control_id: str
@@ -27,7 +27,7 @@ class CISControl:
         return f"CIS {self.section}.{self.control_id}: {self.title}"
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class NISTControl:
     """NIST 800-53 control reference."""
     control_id: str

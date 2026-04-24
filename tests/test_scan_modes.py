@@ -39,6 +39,22 @@ class TestScanModes:
         assert config.check.secrets_check is False
         assert config.output.verbose is True
 
+    def test_owasp_top_10_review_enables_active_web_risk_checks(self) -> None:
+        """OWASP mode should enable the broad live web-risk baseline."""
+        config = Config()
+
+        apply_scan_mode(config, ScanMode.OWASP_TOP_10_REVIEW)
+
+        assert config.scan.mode == "owasp_top_10_review"
+        assert config.check.tls_check is True
+        assert config.check.enable_banner_grabbing is True
+        assert config.check.website_risk_check is True
+        assert config.check.performance_test is True
+        assert config.check.vulnerability_scan is True
+        assert config.check.load_test is False
+        assert config.check.secrets_check is False
+        assert config.output.verbose is True
+
     def test_codebase_review_enables_project_checks(self) -> None:
         """Codebase Review should focus on project files and configs."""
         config = Config()
