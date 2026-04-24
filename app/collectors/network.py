@@ -6,34 +6,8 @@ from dataclasses import dataclass
 from typing import Optional, Iterator
 from pathlib import Path
 
+from ..utils.rate_limiter import RateLimiter
 from ..utils.timeouts import TimeoutManager
-from ..utils.rate_limiter import RateLimiter  # We'll create this
-
-
-# Create rate limiter inline to avoid import issues
-class RateLimiter:
-    """Simple rate limiter."""
-    def __init__(self, requests_per_second: float = 10.0):
-        self.min_interval = 1.0 / requests_per_second if requests_per_second > 0 else 0
-        self.last_request_time: Optional[float] = None
-    
-    def wait(self) -> None:
-        """Wait if necessary to maintain rate limit."""
-        import time
-        
-        if self.min_interval <= 0:
-            return
-        
-        current_time = time.time()
-        
-        if self.last_request_time is not None:
-            elapsed = current_time - self.last_request_time
-            if elapsed < self.min_interval:
-                sleep_time = self.min_interval - elapsed
-                time.sleep(sleep_time)
-                current_time = time.time()
-        
-        self.last_request_time = current_time
 
 
 @dataclass

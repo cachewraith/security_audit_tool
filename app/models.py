@@ -1,20 +1,37 @@
 """Data models for security audit findings and configuration."""
 
+from pathlib import Path
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
-from pathlib import Path
-import uuid
+
+
+class OrderedSeverityValue(str):
+    """String value that preserves stable severity ordering for comparisons."""
+
+    ORDER = {
+        "info": 0,
+        "low": 1,
+        "medium": 2,
+        "high": 3,
+        "critical": 4,
+    }
+
+    def __lt__(self, other: object) -> bool:
+        if isinstance(other, str):
+            return self.ORDER[self] < self.ORDER[other]
+        return super().__lt__(other)
 
 
 class SeverityLevel(Enum):
     """Severity classification for findings."""
-    CRITICAL = "critical"
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
-    INFO = "info"
+    CRITICAL = OrderedSeverityValue("critical")
+    HIGH = OrderedSeverityValue("high")
+    MEDIUM = OrderedSeverityValue("medium")
+    LOW = OrderedSeverityValue("low")
+    INFO = OrderedSeverityValue("info")
 
 
 class ConfidenceLevel(Enum):
@@ -24,6 +41,15 @@ class ConfidenceLevel(Enum):
     MEDIUM = "medium"
     LOW = "low"
     TENTATIVE = "tentative"
+
+
+class ScanMode(Enum):
+    """High-level defensive scan mode."""
+
+    PASSIVE_AUDIT = "passive_audit"
+    ACTIVE_VALIDATION = "active_validation"
+    RESILIENCE_TEST = "resilience_test"
+    CUSTOM = "custom"
 
 
 class Category(Enum):
@@ -229,3 +255,7 @@ class Scope:
             exclude_paths=data.get("exclude_paths", []),
             max_depth=data.get("max_depth", 10),
         )
+
+
+# Compatibility export for older imports and tests.
+from .config import Config  # noqa: E402

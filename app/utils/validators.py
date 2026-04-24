@@ -108,18 +108,19 @@ def validate_host(host: str) -> list[str]:
 
 def is_valid_hostname(hostname: str) -> bool:
     """Check if a string is a valid hostname."""
-    if not hostname or len(hostname) > 253:
+    if not hostname:
         return False
     
     # Remove trailing dot if present
     hostname = hostname.rstrip(".")
+    if len(hostname) > 254:
+        return False
     
     # Check each label
     labels = hostname.split(".")
     
     for label in labels:
-        # Label must be 1-63 characters
-        if not label or len(label) > 63:
+        if not label:
             return False
         
         # Label must start with alphanumeric

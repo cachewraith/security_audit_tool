@@ -21,6 +21,7 @@ class RateLimitConfig:
 @dataclass
 class ScanConfig:
     """Scan behavior configuration."""
+    mode: str = "passive_audit"
     max_depth: int = 10
     follow_symlinks: bool = False
     max_file_size_mb: int = 10
@@ -142,6 +143,7 @@ class Config:
         if "scan" in data:
             sc = data["scan"]
             config.scan = ScanConfig(
+                mode=sc.get("mode", "passive_audit"),
                 max_depth=sc.get("max_depth", 10),
                 follow_symlinks=sc.get("follow_symlinks", False),
                 max_file_size_mb=sc.get("max_file_size_mb", 10),
@@ -207,6 +209,7 @@ class Config:
                 "retry_delay": self.rate_limit.retry_delay,
             },
             "scan": {
+                "mode": self.scan.mode,
                 "max_depth": self.scan.max_depth,
                 "follow_symlinks": self.scan.follow_symlinks,
                 "max_file_size_mb": self.scan.max_file_size_mb,
