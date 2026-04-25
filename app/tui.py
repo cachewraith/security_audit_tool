@@ -25,6 +25,8 @@ from rich.progress_bar import ProgressBar
 from rich.table import Table
 from rich.text import Text
 
+from .auth.config import AuthConfig
+from .auth.token_store import TokenStore
 from .config import Config
 from .core.check_runner import select_checks
 from .core.scan_modes import (
@@ -124,6 +126,7 @@ class TUI:
         self.config = Config()
         self.theme = THEME
         self._last_summary: AuditSummary | None = None
+        self._auth_email = self._load_auth_email()
 
     def _package_version(self) -> str:
         """Return the installed package version or a fallback."""
@@ -141,6 +144,22 @@ class TUI:
         if mode is None:
             return "Not selected"
         return get_scan_mode_definition(mode).label
+
+    def _load_auth_email(self) -> str | None:
+        """Best-effort read of the saved auth email for header display."""
+        try:
+            session = TokenStore(AuthConfig()).load()
+        except Exception:
+            return None
+        if session is None:
+            return None
+        return session.user.email or None
+
+    def _header_identity_text(self) -> Text:
+        """Return the signed-in identity label for header panels."""
+        if not self._auth_email:
+            return Text("Not signed in", style=self.theme["muted"])
+        return Text(self._auth_email, style=f"bold {self.theme['accent']}", overflow="ellipsis", no_wrap=True)
 
     def _scope_lines(self, scope: Scope | None) -> list[str]:
         """Summarize a scope into short lines for side panels."""
@@ -259,14 +278,14 @@ class TUI:
 
         header_grid = Table.grid(expand=True)
         header_grid.add_column(ratio=1)
-        header_grid.add_column(justify="right", width=16)
+        header_grid.add_column(justify="right", width=32)
         header_grid.add_row(
             Text("CACHE WRAITH", style=f"bold {self.theme['primary']}"),
             Text(f"v{self._package_version()}", style=self.theme["muted"]),
         )
         header_grid.add_row(
             Text("Security audit workspace", style=f"bold {self.theme['text']}"),
-            Text("AUTHORIZED USE ONLY", style=f"bold {self.theme['warning']}"),
+            self._header_identity_text(),
         )
 
         header_panel = Panel(
@@ -924,7 +943,10 @@ class TUI:
         frame = self.SPINNER_FRAMES[int(time.perf_counter() * 12) % len(self.SPINNER_FRAMES)]
         progress_total = max(state.total_checks, 1)
 
-        header = Panel(
+        header_grid = Table.grid(expand=True)
+        header_grid.add_column(ratio=1)
+        header_grid.add_column(justify="right", width=32)
+        header_grid.add_row(
             Group(
                 Text(
                     f"{frame}  {state.mode_label}",
@@ -935,6 +957,14 @@ class TUI:
                     style=self.theme["muted"],
                 ),
             ),
+            Group(
+                Text(f"v{self._package_version()}", style=self.theme["muted"], justify="right"),
+                self._header_identity_text(),
+            ),
+        )
+
+        header = Panel(
+            header_grid,
             border_style=self.theme["border"],
             box=box.SQUARE,
             padding=(0, 1),
@@ -1207,9 +1237,9 @@ class TUI:
 
         findings_table = Table(expand=True, box=box.SIMPLE_HEAVY)
         findings_table.add_column("#", width=4, style=f"bold {self.theme['primary']}")
-        findings_table.add_column("Severity", width=10)
-        findings_table.add_column("Title", style=self.theme["text"], ratio=3)
-        findings_table.add_column("Target", style=self.theme["muted"], ratio=2)
+        findings_table.add_column("Severity", width=10, no_wrap=True)
+        findings_table.add_column("Title", style=self.theme["text"], ratio=3, overflow="fold")
+        findings_table.add_column("Target", style=self.theme["muted"], ratio=2, overflow="fold")
 
         severity_style = {
             SeverityLevel.CRITICAL: self.theme["error"],
@@ -1229,6 +1259,12 @@ class TUI:
                 Text(str(finding.target)),
             )
 
+        finding_index = Table.grid(expand=True, padding=(0, 1))
+        finding_index.add_column(style=f"bold {self.theme['primary']}", width=4)
+        finding_index.add_column(style=self.theme["text"], ratio=1)
+        for index, finding in enumerate(sorted_findings, start=1):
+            finding_index.add_row(f"{index}.", finding.title)
+
         sections: list[Any] = [
             Text("The audit finished and these findings were detected:", style=self.theme["text"]),
             Text("Reports have been written where configured.", style=self.theme["muted"]),
@@ -1240,6 +1276,13 @@ class TUI:
             Panel(
                 overview,
                 title=f"[bold {self.theme['secondary']}]Summary[/]",
+                border_style=self.theme["border"],
+                box=box.ROUNDED,
+            ),
+            Text(""),
+            Panel(
+                finding_index,
+                title=f"[bold {self.theme['secondary']}]Finding Index[/]",
                 border_style=self.theme["border"],
                 box=box.ROUNDED,
             ),

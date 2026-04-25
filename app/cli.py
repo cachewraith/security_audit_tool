@@ -17,6 +17,9 @@ def create_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Authenticate the CLI with the Laravel portal
+  security-audit login
+
   # Audit with scope file
   python -m app.main --scope-file scope.yml
 

@@ -90,6 +90,9 @@ firefox audit_report_*.html
 ### Basic Scanning
 
 ```bash
+# Authenticate the CLI with the Laravel portal
+security-audit login
+
 # Scan any website
 security-audit --url https://example.com --full-scan
 
@@ -105,6 +108,24 @@ security-audit --url https://api1.com --url https://api2.com --full-scan
 # Interactive mode (no arguments)
 security-audit
 ```
+
+### Account Commands
+
+```bash
+# Sign in through the Laravel portal in your browser
+security-audit login
+
+# Show the currently authenticated account
+security-audit whoami
+
+# Revoke the CLI token and remove local auth state
+security-audit logout
+```
+
+Token storage:
+- The CLI prefers OS keyring storage when available
+- Otherwise it stores auth state at `~/.config/security-audit/auth.json` with restricted permissions
+- Tokens are never printed to the terminal
 
 ### Pentest Mode (Active Testing)
 
