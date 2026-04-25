@@ -1,6 +1,7 @@
 """Tests for TUI interaction behavior."""
 
 from datetime import datetime
+from types import SimpleNamespace
 
 import pytest
 
@@ -178,3 +179,28 @@ class TestTUITextPrompt:
 
         with pytest.raises(NavigateBack):
             tui._prompt_ask("Select mode", choices=["1", "2"], default="1")
+
+
+class TestTUIIdentityHeader:
+    """Tests for auth identity rendering in the TUI header."""
+
+    def test_render_shell_shows_logged_in_email(self, monkeypatch) -> None:
+        """Workspace header should show the saved login email in the top-right area."""
+        monkeypatch.setattr(
+            "app.tui.TokenStore.load",
+            lambda _self: SimpleNamespace(user=SimpleNamespace(email="alice@example.com")),
+        )
+
+        tui = TUI()
+        layout = tui._render_shell(
+            title="Select Scan Mode",
+            body="Body",
+            current_step=0,
+            subtitle="Subtitle",
+        )
+
+        with tui.console.capture() as capture:
+            tui.console.print(layout)
+        rendered = capture.get()
+
+        assert "alice@example.com" in rendered

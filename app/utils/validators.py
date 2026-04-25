@@ -305,17 +305,16 @@ def get_downloads_path() -> Path:
     
     # Try platform-specific paths
     if system == "Windows":
+        home_path = Path.home()
         # On Windows, try multiple possible locations
         possible_paths = [
-            Path.home() / "Downloads",
+            home_path / "Downloads",
             Path(os.environ.get("USERPROFILE", "")) / "Downloads" if os.environ.get("USERPROFILE") else None,
-            Path(os.path.expanduser("~")) / "Downloads",
         ]
     else:
         # macOS and Linux typically use ~/Downloads
         possible_paths = [
             Path.home() / "Downloads",
-            Path(os.path.expanduser("~")) / "Downloads",
         ]
     
     # Filter out None values and check which path exists

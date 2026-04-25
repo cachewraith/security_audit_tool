@@ -11,6 +11,9 @@ from .cli import (
     generate_scope_example,
     build_config_from_args,
 )
+from .auth import maybe_handle_auth_command, require_authenticated_session
+from .auth.config import AuthConfig
+from .auth.exceptions import AuthError, StorageError
 from .config import Config
 from .core import get_available_checks, run_audit_workflow, run_checks
 from .scope import ScopeManager, ScopeError
@@ -27,6 +30,18 @@ def main(args: list[str] | None = None) -> int:
     # Check if we should run in interactive TUI mode
     # Run TUI if no arguments are provided to the script
     actual_args = args if args is not None else sys.argv[1:]
+
+    auth_result = maybe_handle_auth_command(actual_args)
+    if auth_result is not None:
+        if not auth_result.launch_tool:
+            return auth_result.exit_code
+        actual_args = []
+
+    try:
+        require_authenticated_session(AuthConfig())
+    except (AuthError, StorageError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
     
     if not actual_args:
         tui = TUI()
